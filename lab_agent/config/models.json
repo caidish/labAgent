@@ -15,7 +15,7 @@
     }
   },
   "chatModel": {
-    "name": "gpt-5-mini",
+    "name": "gpt-5",
     "provider": "openai",
     "api_type": "responses",
     "description": "Model used for chatting about arXiv papers",
@@ -56,10 +56,6 @@
     ]
   },
   "modelSettings": {
-    "rateLimiting": {
-      "requestsPerMinute": 60,
-      "tokensPerMinute": 90000
-    },
     "retrySettings": {
       "maxRetries": 3,
       "backoffMultiplier": 2

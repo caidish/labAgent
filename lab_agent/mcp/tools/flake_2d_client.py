@@ -69,13 +69,13 @@ class Flake2DClient(BaseTool):
             ),
             Tool(
                 name="upload_2d_flake_image",
-                description="Upload an image file to the external 2D flake classification server",
+                description="Upload a 2D material flake image to the external classification server. ALWAYS call this before classify_2d_flake. Use available files from uploads directory.",
                 inputSchema={
                     "type": "object",
                     "properties": {
                         "image_path": {
                             "type": "string",
-                            "description": "Path to the image file to upload (can be filename only if uploaded via web interface)"
+                            "description": "Filename of the image to upload. Available images are in uploads/flake_images/ directory."
                         },
                         "description": {
                             "type": "string",
@@ -88,17 +88,17 @@ class Flake2DClient(BaseTool):
             ),
             Tool(
                 name="classify_2d_flake",
-                description="Classify the quality of a 2D material flake using specified neural network model",
+                description="Classify 2D material flake quality using neural networks. Must call upload_2d_flake_image first to get the image_filename.",
                 inputSchema={
                     "type": "object",
                     "properties": {
                         "model_name": {
                             "type": "string",
-                            "description": "Name of the neural network model to use (get from get_2d_flake_models)"
+                            "description": "Neural network model name (e.g., 'hBN_monolayer', 'graphene_2'). Available from connect_2d_flake_server response."
                         },
                         "image_filename": {
                             "type": "string",
-                            "description": "Filename of the uploaded image (from upload_2d_flake_image response)"
+                            "description": "Server filename from upload_2d_flake_image response (e.g., 'abc123-def4-5678-uuid.jpg')"
                         }
                     },
                     "required": ["model_name", "image_filename"]
@@ -201,17 +201,50 @@ class Flake2DClient(BaseTool):
             self.connection_status = "connected"
             self.last_connection_check = datetime.now()
             
+            # Automatically check available models after successful connection
+            available_models = []
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    models_response = await client.get(f"{server_url}/mcp/tools/list_models")
+                    models_response.raise_for_status()
+                    models_data = models_response.json()
+                    
+                    # Handle different response structures  
+                    if isinstance(models_data, dict):
+                        available_models = models_data.get("models", [])
+                    elif isinstance(models_data, str):
+                        # Try to parse as JSON if it's a string
+                        import json
+                        try:
+                            parsed_data = json.loads(models_data)
+                            if isinstance(parsed_data, dict):
+                                available_models = parsed_data.get("models", [])
+                        except json.JSONDecodeError:
+                            self.logger.warning(f"Could not parse models response: {models_data}")
+                    
+                    self.logger.info(f"Automatically discovered {len(available_models)} models")
+            except Exception as e:
+                self.logger.warning(f"Could not auto-fetch models: {e}")
+            
             response_data = {
                 "server_url": server_url,
                 "connection_status": "connected",
                 "health_data": health_data,
                 "mcp_capabilities": self.server_capabilities,
+                "available_models": available_models,
                 "connected_at": self.last_connection_check.isoformat()
             }
             
+            # Create comprehensive success message
+            success_message = f"Successfully connected to 2D flake MCP server at {server_url}"
+            if available_models:
+                # available_models is a list of strings (model names)
+                success_message += f"\n\nAvailable models: {', '.join(available_models)}"
+                success_message += f"\n\nYou can now directly upload images and classify them using any of these models."
+            
             return self.format_success_response(
                 response_data,
-                f"Successfully connected to 2D flake MCP server at {server_url}"
+                success_message
             )
             
         except httpx.RequestError as e:

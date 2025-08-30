@@ -1,0 +1,115 @@
+{
+  "model": "gpt-4.1",
+  "api_endpoint": "responses",
+  "purpose": "general_assistant",
+  "description": "LLM chatbox for general assistance and MCP tool integration",
+  "config": {
+    "model": "gpt-4.1",
+    "max_tokens": 4000,
+    "temperature": 0.7,
+    "tools": [],
+    "store": true,
+    "include": [
+      "reasoning.encrypted_content"
+    ]
+  },
+  "system_prompt": "You are an AI assistant integrated into a condensed matter physics laboratory management system. You have access to ArXiv Daily report tools and 2D Material Flake Classification tools.\n\n**AUTOMATIC WORKFLOW EXECUTION:**\n\nWhen users request operations that require multiple steps, execute the COMPLETE workflow automatically. Do NOT stop between steps to ask for confirmation or provide interim updates.\n\n**ArXiv Daily Tools:**\n- `generate_daily_report`: Generate new reports\n- `read_daily_report`: Read existing reports (summary only)\n- `search_papers_by_author`: Search ALL papers by author (full report search)\n- `list_available_reports`: List available reports\n\n**2D Flake Analysis - STREAMLINED AUTOMATIC SEQUENCE:**\n\nWhen users request flake analysis, automatically execute these steps:\n1. `connect_2d_flake_server` (http://0.0.0.0:8000) - This automatically discovers available models\n2. `upload_2d_flake_image` - ALWAYS upload the image first (use available files from uploads)\n3. `classify_2d_flake` - Use the uploaded_filename from step 2 and a model from step 1\n\n**CRITICAL UPLOAD REQUIREMENTS:**\n- ALWAYS call `upload_2d_flake_image` before classification\n- Available images in uploads/flake_images/ directory\n- The upload returns an uploaded_filename - use this EXACT filename for classification\n- If user doesn't specify an image, check available files in uploads directory\n- NEVER skip upload step - it's mandatory even if image seems 'already uploaded'\n\n**CRITICAL: Execute the full 3-step sequence automatically. Never skip the upload step.**\n\n**Additional Tools:**\n- `get_2d_flake_history`: Previous classifications  \n- `get_2d_flake_server_status`: Server health check\n\n**Examples of Automatic Execution:**\n- User: \"analyze this flake image\" → Execute steps 1-3 automatically (connect, upload, classify), then provide analysis\n- User: \"generate report\" → Call `generate_daily_report`, then `read_daily_report` to show summary\n- User: \"check flake server\" → Call `connect_2d_flake_server` (automatically shows available models)\n\n**Key Principle: Complete the full workflow automatically. Present the final results, not the intermediate steps.**\n\nProvide clear, accurate, and helpful responses. When discussing scientific topics, be precise and cite relevant concepts.",
+  "conversation_settings": {
+    "max_exchanges": 100,
+    "context_window": 50,
+    "enable_reasoning_display": true,
+    "show_token_usage": true,
+    "auto_collapse_threshold": 800
+  },
+  "ui_settings": {
+    "title": "AI Assistant",
+    "subtitle": "AI Assistant for Lab Management",
+    "placeholder_text": "Ask me anything about research, papers, or lab management...",
+    "suggested_prompts": [
+      "Generate today's ArXiv report and show me the high-priority papers",
+      "Analyze the hBN04.jpg flake image with automatic workflow",
+      "Run complete flake analysis: connect, upload hBNnot.jpg, and classify",
+      "Connect to flake server and check available models"
+    ]
+  },
+  "mcp_integration": {
+    "enabled": true,
+    "server_startup": true,
+    "arxiv_daily_tools": [
+      {
+        "name": "read_daily_report",
+        "description": "Read and analyze existing ArXiv Daily reports",
+        "status": "active"
+      },
+      {
+        "name": "generate_daily_report", 
+        "description": "Generate new ArXiv Daily reports",
+        "status": "active"
+      },
+      {
+        "name": "list_available_reports",
+        "description": "List available ArXiv Daily reports with metadata", 
+        "status": "active"
+      },
+      {
+        "name": "search_papers_by_author",
+        "description": "Search ALL papers in ArXiv Daily reports by author name - searches the complete report (all 144 papers), not just summaries",
+        "status": "active"
+      }
+    ],
+    "flake_2d_tools": [
+      {
+        "name": "connect_2d_flake_server",
+        "description": "Connect to external 2D flake classification MCP server",
+        "status": "active"
+      },
+      {
+        "name": "get_2d_flake_models",
+        "description": "Get list of available neural network models from server",
+        "status": "active"
+      },
+      {
+        "name": "upload_2d_flake_image",
+        "description": "Upload flake images to external server for analysis",
+        "status": "active"
+      },
+      {
+        "name": "classify_2d_flake",
+        "description": "Classify 2D material flake quality using neural networks",
+        "status": "active"
+      },
+      {
+        "name": "get_2d_flake_history",
+        "description": "Get history of flake quality predictions",
+        "status": "active"
+      },
+      {
+        "name": "get_2d_flake_server_status",
+        "description": "Check health of external 2D flake server",
+        "status": "active"
+      }
+    ],
+    "planned_tools": [
+      {
+        "name": "literature_search",
+        "description": "Search scientific literature and databases",
+        "status": "planned"
+      },
+      {
+        "name": "data_analysis",
+        "description": "Analyze experimental data and generate plots",
+        "status": "planned"
+      },
+      {
+        "name": "calculation_tools",
+        "description": "Perform scientific calculations and simulations",
+        "status": "planned"
+      },
+      {
+        "name": "lab_equipment_interface",
+        "description": "Interface with laboratory equipment and instruments",
+        "status": "planned"
+      }
+    ]
+  }
+}

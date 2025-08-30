@@ -12,7 +12,7 @@ class Config:
         
         # OpenAI Configuration
         self.openai_api_key = os.getenv("OPENAI_API_KEY")
-        self.openai_model = os.getenv("OPENAI_MODEL", "gpt-5-mini")
+        self.openai_model = os.getenv("OPENAI_MODEL", "gpt-5")
         
         # Google Gemini Configuration
         self.google_api_key = os.getenv("GOOGLE_API_KEY")

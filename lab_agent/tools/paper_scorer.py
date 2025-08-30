@@ -4,7 +4,7 @@ import json
 from typing import List, Dict
 from openai import OpenAI
 from ..utils import Config
-from .gpt5_mini_client import GPT5MiniClient
+from .llm_client import LLMClient
 
 
 class PaperScorer:
@@ -23,9 +23,9 @@ class PaperScorer:
         
         # Initialize GPT-5-mini client if needed
         if self.model_config.get('name') == 'gpt-5-mini':
-            self.gpt5_mini_client = GPT5MiniClient()
+            self.llm_client = LLMClient()
         else:
-            self.gpt5_mini_client = None
+            self.llm_client = None
         
     def _load_model_config(self) -> Dict:
         """Load model configuration from models.json"""
@@ -107,7 +107,7 @@ Subjects: {paper.get('subjects', 'N/A')}
         prompt = self.prompt_template.replace('{PAPER_INFO}', paper_info)
         
         try:
-            if self.gpt5_mini_client:
+            if self.llm_client:
                 # Use GPT-5-mini responses API
                 print(f"[DEBUG] Making GPT-5-mini API call...")
                 messages = [
@@ -115,9 +115,10 @@ Subjects: {paper.get('subjects', 'N/A')}
                     {"role": "user", "content": prompt}
                 ]
                 
-                result = self.gpt5_mini_client.create_response(
+                result = self.llm_client.create_response(
                     messages=messages, 
-                    use_case=self.model_config.get('purpose', 'paper_scoring')
+                    use_case=self.model_config.get('purpose', 'paper_scoring'),
+                    model=self.model_config.get('name', 'gpt-5-mini')
                 )
                 
                 if result['success']:

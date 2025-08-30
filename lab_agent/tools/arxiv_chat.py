@@ -4,7 +4,7 @@ import os
 from typing import List, Dict, Optional
 from openai import OpenAI
 from ..utils import Config
-from .gpt5_mini_client import GPT5MiniClient
+from .llm_client import LLMClient
 
 
 class ArxivChat:
@@ -21,11 +21,11 @@ class ArxivChat:
         self.conversation_history = []
         self.current_papers = []
         
-        # Initialize GPT-5-mini client if needed
-        if self.model_config.get('name') == 'gpt-5-mini':
-            self.gpt5_mini_client = GPT5MiniClient()
+        # Initialize GPT-5 client if needed  
+        if self.model_config.get('name') == 'gpt-5':
+            self.llm_client = LLMClient()
         else:
-            self.gpt5_mini_client = None
+            self.llm_client = None
         
     def _load_system_prompt(self) -> str:
         prompt_path = os.path.join(
@@ -144,15 +144,16 @@ class ArxivChat:
             })
             
             # Call appropriate API based on model
-            if self.gpt5_mini_client:
-                # Use GPT-5-mini responses API
-                result = self.gpt5_mini_client.create_response(
+            if self.llm_client:
+                # Use GPT-5 responses API
+                result = self.llm_client.create_response(
                     messages=self.conversation_history,
-                    use_case=self.model_config.get('purpose', 'chat_conversation')
+                    use_case=self.model_config.get('purpose', 'chat_conversation'),
+                    model=self.model_config.get('name', 'gpt-5')
                 )
                 
                 if not result['success']:
-                    raise Exception(result.get('error', 'Unknown GPT-5-mini API error'))
+                    raise Exception(result.get('error', 'Unknown GPT-5 API error'))
                 
                 assistant_message = result['content']
             else:

@@ -25,7 +25,7 @@ Edit `.env` file with your API keys:
 ```bash
 # Required for ArXiv Daily Updates and MCP Tools
 OPENAI_API_KEY=your_openai_api_key_here
-OPENAI_MODEL=gpt-5-mini
+OPENAI_MODEL=gpt-5
 
 # Optional  
 GOOGLE_API_KEY=your_google_api_key_here

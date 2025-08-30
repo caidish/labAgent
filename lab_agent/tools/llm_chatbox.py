@@ -3,16 +3,16 @@ import logging
 import os
 import asyncio
 from typing import List, Dict, Optional, Any
-from .gpt5_mini_client import GPT5MiniClient
+from .llm_client import LLMClient
 from ..utils.tool_manager import ToolManager
 
 
-class GPT5MiniChatbox:
-    """GPT-5-mini chatbox for general assistance and future MCP tool integration"""
+class LLMChatbox:
+    """LLM chatbox for general assistance and MCP tool integration"""
     
     def __init__(self):
-        self.logger = logging.getLogger("tools.gpt5_mini_chatbox")
-        self.client = GPT5MiniClient()
+        self.logger = logging.getLogger("tools.llm_chatbox")
+        self.client = LLMClient()
         self.config = self._load_config()
         self.conversation_history = []
         self.mcp_client = None
@@ -30,7 +30,7 @@ class GPT5MiniChatbox:
         config_path = os.path.join(
             os.path.dirname(os.path.dirname(__file__)), 
             'config', 
-            'gpt5_mini_chatbox_config.json'
+            'llm_chatbox_config.json'
         )
         
         try:
@@ -130,31 +130,49 @@ Always provide helpful context and summaries when using these tools.
         
         return tools_context
     
-    def _prepare_tools_for_gpt5mini(self) -> List[Dict[str, Any]]:
-        """Prepare MCP tools for GPT-5-mini responses API"""
+    def _prepare_tools_for_llm(self) -> List[Dict[str, Any]]:
+        """Prepare MCP tools for LLM API"""
         if not self.mcp_client:
             return []
         
-        gpt5_tools = []
+        llm_tools = []
         
         # Get available tools from MCP client
         available_tools = self.mcp_client.get_available_tools()
         
-        for tool in available_tools:
-            # GPT-5-mini responses API format
-            gpt5_tool = {
-                "type": "function",
-                "name": tool["name"],
-                "description": tool["description"],
-                "parameters": tool.get("inputSchema", {
-                    "type": "object",
-                    "properties": {},
-                    "required": []
-                })
-            }
-            gpt5_tools.append(gpt5_tool)
+        # Check what model we're using to format tools correctly
+        model = self.config.get("model", "gpt-4.1")
         
-        return gpt5_tools
+        for tool in available_tools:
+            if model.startswith("gpt-5"):
+                # Responses API format (simpler format)
+                llm_tool = {
+                    "type": "function",
+                    "name": tool["name"],
+                    "description": tool["description"],
+                    "parameters": tool.get("inputSchema", {
+                        "type": "object",
+                        "properties": {},
+                        "required": []
+                    })
+                }
+            else:
+                # Chat completions API format (nested function format) - for GPT-4.1
+                llm_tool = {
+                    "type": "function",
+                    "function": {
+                        "name": tool["name"],
+                        "description": tool["description"],
+                        "parameters": tool.get("inputSchema", {
+                            "type": "object",
+                            "properties": {},
+                            "required": []
+                        })
+                    }
+                }
+            llm_tools.append(llm_tool)
+        
+        return llm_tools
     
     async def _execute_tool_call(self, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an MCP tool call"""
@@ -188,14 +206,21 @@ Always provide helpful context and summaries when using these tools.
             
             if self.mcp_client and self.config.get("mcp_integration", {}).get("enabled", False):
                 # Add MCP tools to the config
-                mcp_tools = self._prepare_tools_for_gpt5mini()
+                mcp_tools = self._prepare_tools_for_llm()
                 if mcp_tools:
                     custom_config["tools"] = mcp_tools
-                    self.logger.info(f"🔧 Added {len(mcp_tools)} tools to GPT-5-mini request: {[t['name'] for t in mcp_tools]}")
+                    # Extract tool names for logging (handle both formats)
+                    tool_names = []
+                    for t in mcp_tools:
+                        if 'function' in t:
+                            tool_names.append(t['function']['name'])
+                        else:
+                            tool_names.append(t['name'])
+                    self.logger.info(f"🔧 Added {len(mcp_tools)} tools to LLM request: {tool_names}")
                 else:
                     self.logger.warning("⚠️  No MCP tools available to add to request")
             
-            # Create response using GPT-5-mini client
+            # Create response using LLM client
             result = self.client.create_response(
                 messages=self.conversation_history,
                 use_case=self.config.get("purpose", "general_assistant"),
@@ -208,8 +233,9 @@ Always provide helpful context and summaries when using these tools.
                 tool_call_results = []
                 
                 # Look for tool calls in the response metadata
+                self.logger.info(f"🔍 DEBUG: Response metadata: {result.get('metadata', {})}")
                 if result.get('metadata') and result['metadata'].get('tool_calls'):
-                    self.logger.info(f"🔧 GPT-5-mini made tool calls: {result['metadata']['tool_calls']}")
+                    self.logger.info(f"🔧 LLM made tool calls: {result['metadata']['tool_calls']}")
                     
                     # Execute each tool call and collect results for follow-up
                     tool_results_for_followup = []
@@ -284,6 +310,9 @@ Always provide helpful context and summaries when using these tools.
                         else:
                             # If follow-up fails, show brief summary
                             response_content += f"\n\n✅ Executed {len(tool_results_for_followup)} tools successfully (analysis unavailable)"
+                else:
+                    # No tool calls detected
+                    self.logger.warning(f"⚠️  NO TOOL CALLS DETECTED - LLM may be responding without tool use!")
                 
                 # Add the final assistant response to history (either original or analyzed)
                 self.conversation_history.append({

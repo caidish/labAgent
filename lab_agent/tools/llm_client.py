@@ -6,25 +6,25 @@ from openai import OpenAI
 from ..utils import Config
 
 
-class GPT5MiniClient:
-    """Client wrapper for GPT-5-mini using the new responses API"""
+class LLMClient:
+    """Client wrapper for OpenAI LLM models (GPT-4.1, GPT-5, etc.)"""
     
     def __init__(self):
-        self.logger = logging.getLogger("tools.gpt5_mini_client")
+        self.logger = logging.getLogger("tools.llm_client")
         self.config = Config()
         
         if not self.config.openai_api_key:
             raise ValueError("OpenAI API key not found. Please set OPENAI_API_KEY in your .env file")
         
         self.client = OpenAI(api_key=self.config.openai_api_key)
-        self.gpt5_config = self._load_gpt5_config()
+        self.llm_config = self._load_llm_config()
         
-    def _load_gpt5_config(self) -> Dict:
-        """Load GPT-5-mini specific configuration"""
+    def _load_llm_config(self) -> Dict:
+        """Load LLM-specific configuration"""
         config_path = os.path.join(
             os.path.dirname(os.path.dirname(__file__)), 
             'config', 
-            'gpt5_mini_config.json'
+            'llm_config.json'
         )
         
         try:
@@ -57,18 +57,101 @@ class GPT5MiniClient:
         self, 
         messages: List[Dict[str, str]], 
         use_case: str = "default",
-        custom_config: Optional[Dict] = None
+        custom_config: Optional[Dict] = None,
+        model: str = None
     ) -> Dict[str, Any]:
         """
-        Create a response using GPT-5-mini responses API
+        Create a response using appropriate API for the model
         
         Args:
             messages: List of message dicts with 'role' and 'content'
             use_case: Configuration preset to use ('paper_scoring', 'chat_conversation', 'research_analysis')
             custom_config: Override default configuration
+            model: Model to use (e.g., 'gpt-4.1', 'gpt-5-mini')
         """
         try:
-            # Prepare input from messages - GPT-5-mini uses 'message' type
+            # Get configuration
+            if custom_config:
+                config = custom_config
+            elif use_case in self.llm_config.get("use_cases", {}):
+                base_config = self.llm_config["default_config"].copy()
+                use_case_config = self.llm_config["use_cases"][use_case]
+                base_config.update(use_case_config)
+                config = base_config
+            else:
+                config = self.llm_config["default_config"]
+            
+            # Determine model to use
+            model_name = model or config.get("model", "gpt-4.1")
+            
+            # Choose API based on model type
+            if model_name.startswith("gpt-5"):
+                # GPT-5 series uses responses API
+                return self._create_responses_api(messages, model_name, config)
+            else:
+                # GPT-4.1 and other models use chat completions API
+                return self._create_chat_completion(messages, model_name, config)
+                
+        except Exception as e:
+            self.logger.error(f"Error creating response: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "content": "",
+                "metadata": {"error": "API call failed"}
+            }
+    
+    def _create_chat_completion(self, messages: List[Dict[str, str]], model: str, config: Dict) -> Dict[str, Any]:
+        """Create response using chat completions API (for GPT-4.1, etc.)"""
+        try:
+            # Prepare API parameters for chat completions
+            api_params = {
+                "model": model,
+                "messages": messages,
+                "max_tokens": config.get("max_tokens", 4000),
+                "temperature": config.get("temperature", 0.7)
+            }
+            
+            # Add tools if provided
+            tools = config.get("tools", [])
+            if tools:
+                api_params["tools"] = tools
+                api_params["tool_choice"] = "auto"
+                self.logger.info(f"🔧 Adding {len(tools)} tools to chat completion")
+            
+            self.logger.info(f"Making chat completions API call with model: {model}")
+            self.logger.debug(f"API params: {api_params}")
+            
+            # Make the API call
+            response = self.client.chat.completions.create(**api_params)
+            
+            self.logger.info(f"✅ Chat completion response received, type: {type(response)}")
+            self.logger.debug(f"Response structure: {response}")
+            
+            # Extract response content and tool calls
+            message = response.choices[0].message
+            content = message.content or ""
+            tool_calls = message.tool_calls or []
+            
+            return {
+                "success": True,
+                "content": content,
+                "reasoning": None,  # Chat completions doesn't have reasoning
+                "metadata": {
+                    "model": model,
+                    "tool_calls": self._format_tool_calls_for_chat(tool_calls),
+                    "usage": response.usage.dict() if response.usage else None
+                }
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Chat completions API error: {e}")
+            raise
+    
+    def _create_responses_api(self, messages: List[Dict[str, str]], model: str, config: Dict) -> Dict[str, Any]:
+        """Create response using responses API (for GPT-5 models)"""
+        try:
+            # Prepare input from messages
             input_data = []
             for msg in messages:
                 input_data.append({
@@ -77,21 +160,9 @@ class GPT5MiniClient:
                     "content": msg['content']
                 })
             
-            # Get configuration for use case
-            if custom_config:
-                config = custom_config
-            elif use_case in self.gpt5_config.get("use_cases", {}):
-                base_config = self.gpt5_config["default_config"].copy()
-                use_case_config = self.gpt5_config["use_cases"][use_case]
-                # Merge configurations
-                base_config.update(use_case_config)
-                config = base_config
-            else:
-                config = self.gpt5_config["default_config"]
-            
-            # Prepare API call parameters
+            # Prepare API parameters
             api_params = {
-                "model": "gpt-5-mini",
+                "model": model,
                 "input": input_data,
                 "text": config.get("text", {
                     "format": {"type": "text"},
@@ -105,39 +176,38 @@ class GPT5MiniClient:
                 "store": config.get("store", True)
             }
             
-            # Add include parameter if specified
             if "include" in config:
                 api_params["include"] = config["include"]
             
-            self.logger.info(f"Making GPT-5-mini API call with use_case: {use_case}")
+            self.logger.info(f"Making responses API call with model: {model}")
+            self.logger.debug(f"API params: {api_params}")
             
-            # Make the API call using responses API (no max_tokens or temperature support)
+            # Make the API call
             response = self.client.responses.create(**api_params)
             
-            # Extract response content
-            result = {
+            self.logger.info(f"✅ Responses API response received, type: {type(response)}")
+            self.logger.debug(f"Response structure: {response}")
+            
+            return {
                 "success": True,
                 "content": self._extract_content(response),
                 "reasoning": self._extract_reasoning(response),
                 "metadata": {
-                    "use_case": use_case,
-                    "model": "gpt-5-mini",
+                    "model": model,
                     "reasoning_effort": config.get("reasoning", {}).get("effort", "medium"),
                     "tool_calls": self._extract_tool_calls(response)
                 }
             }
             
-            self.logger.info("GPT-5-mini API call successful")
-            return result
-            
         except Exception as e:
-            self.logger.error(f"GPT-5-mini API error: {e}")
+            self.logger.error(f"Responses API error: {e}")
+            import traceback
+            self.logger.error(f"Traceback: {traceback.format_exc()}")
             return {
                 "success": False,
                 "error": str(e),
-                "content": f"Error: {e}",
-                "reasoning": None,
-                "metadata": {"use_case": use_case, "model": "gpt-5-mini"}
+                "content": "",
+                "metadata": {"error": "Responses API call failed"}
             }
     
     def _extract_content(self, response) -> str:
@@ -268,6 +338,22 @@ class GPT5MiniClient:
             self.logger.error(f"Could not extract tool calls: {e}")
             return []
     
+    def _format_tool_calls_for_chat(self, tool_calls) -> List[Dict[str, Any]]:
+        """Format tool calls from chat completions API to standard format"""
+        formatted_calls = []
+        try:
+            for tool_call in tool_calls:
+                formatted_call = {
+                    'id': tool_call.id,
+                    'name': tool_call.function.name,
+                    'arguments': json.loads(tool_call.function.arguments) if isinstance(tool_call.function.arguments, str) else tool_call.function.arguments
+                }
+                formatted_calls.append(formatted_call)
+            return formatted_calls
+        except Exception as e:
+            self.logger.error(f"Could not format tool calls: {e}")
+            return []
+    
     def score_paper(self, paper_info: str) -> Dict[str, Any]:
         """Score a paper using optimized GPT-5-mini configuration"""
         messages = [
@@ -304,8 +390,8 @@ class GPT5MiniClient:
     
     def get_available_use_cases(self) -> List[str]:
         """Get list of available use case configurations"""
-        return list(self.gpt5_config.get("use_cases", {}).keys())
+        return list(self.llm_config.get("use_cases", {}).keys())
     
     def get_use_case_info(self, use_case: str) -> Optional[Dict]:
         """Get information about a specific use case configuration"""
-        return self.gpt5_config.get("use_cases", {}).get(use_case)
+        return self.llm_config.get("use_cases", {}).get(use_case)

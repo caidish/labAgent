@@ -15,7 +15,7 @@ from lab_agent.utils import Config
 from lab_agent.utils.tool_manager import ToolManager
 from lab_agent.agents.arxiv_daily_agent import ArxivDailyAgent
 from lab_agent.tools.arxiv_chat import ArxivChat
-from lab_agent.tools.gpt5_mini_chatbox import GPT5MiniChatbox
+from lab_agent.tools.llm_chatbox import LLMChatbox
 
 nest_asyncio.apply()
 
@@ -59,13 +59,13 @@ def main():
     if "chat_messages" not in st.session_state:
         st.session_state.chat_messages = []
     
-    # Initialize GPT-5-mini chatbox
-    if "gpt5_mini_chatbox" not in st.session_state:
+    # Initialize LLM chatbox
+    if "llm_chatbox" not in st.session_state:
         try:
-            st.session_state.gpt5_mini_chatbox = GPT5MiniChatbox()
+            st.session_state.llm_chatbox = LLMChatbox()
         except Exception as e:
-            st.error(f"Failed to initialize GPT-5-mini chatbox: {e}")
-            st.session_state.gpt5_mini_chatbox = None
+            st.error(f"Failed to initialize AI chatbox: {e}")
+            st.session_state.llm_chatbox = None
     
     # Initialize overview chat messages
     if "overview_chat_messages" not in st.session_state:
@@ -100,8 +100,8 @@ def main():
                     models_data = json.load(f)
                     models_config = {
                         "ArXiv Filter Model": models_data.get('arxivFilterModel', {}).get('name', 'gpt-5-mini'),
-                        "Chat Model": models_data.get('chatModel', {}).get('name', 'gpt-5-mini'),
-                        "GPT-5-mini Chatbox": "gpt-5-mini (MCP enabled)",
+                        "ArXiv Chat Model": models_data.get('chatModel', {}).get('name', 'gpt-5'),
+                        "AI Chatbox": "gpt-4.1 (MCP enabled)",
                         "Gemini Model": config.gemini_model,
                         "Debug Mode": config.debug,
                         "Log Level": config.log_level
@@ -132,13 +132,13 @@ def main():
                 "🕷️ Web Scraper - Extract data from web pages",
                 "🔍 ArXiv Parser - Parse research papers from ArXiv API",
                 "🤖 Multi-model AI - OpenAI GPT-4 and Google Gemini integration",
-                "🤖 GPT-5-mini Assistant - AI chatbox with MCP tools for ArXiv Daily & 2D Flakes"
+                "🤖 AI Assistant - AI chatbox with MCP tools for ArXiv Daily & 2D Flakes"
             ]
             for tool in tools:
                 st.markdown(f"- {tool}")
         
         with col3:
-            gpt5_mini_chatbox_interface()
+            llm_chatbox_interface()
 
     with tabs[1]:
         arxiv_daily_interface()
@@ -368,7 +368,14 @@ def arxiv_chat_interface():
             if message["role"] == "user":
                 st.chat_message("user").write(message["content"])
             else:
-                st.chat_message("assistant").write(message["content"])
+                # Assistant message with collapsible content for long responses
+                with st.chat_message("assistant"):
+                    render_collapsible_message(
+                        content=message["content"],
+                        message_list=st.session_state.chat_messages,
+                        message=message,
+                        prefix="expand_arxiv_msg"
+                    )
     
     # Suggested questions
     if not st.session_state.chat_messages:
@@ -413,20 +420,93 @@ def handle_chat_message(user_message: str):
         st.error(f"Error in chat: {e}")
 
 
-def gpt5_mini_chatbox_interface():
-    """GPT-5-mini chatbox interface for general assistance and future MCP tools"""
-    if st.session_state.gpt5_mini_chatbox is None:
-        st.error("GPT-5-mini chatbox not available. Please check your OpenAI API key.")
+def llm_chatbox_interface():
+    """AI chatbox interface for general assistance and MCP tools"""
+    if st.session_state.llm_chatbox is None:
+        st.error("LLM chatbox not available. Please check your OpenAI API key.")
         return
     
     # Get UI configuration
-    ui_config = st.session_state.gpt5_mini_chatbox.get_ui_config()
+    ui_config = st.session_state.llm_chatbox.get_ui_config()
     
     st.subheader(ui_config["title"])
     st.markdown(f"*{ui_config['subtitle']}*")
     
+    # File Upload Section
+    with st.expander("📁 File Upload & Management", expanded=False):
+        st.markdown("Upload flake images for 2D material analysis. Once uploaded, you can reference them by name in your chat.")
+        st.info("💡 **Usage:** After uploading, simply say 'Analyze [filename.jpg]' or 'Complete flake analysis for my_image.png'")
+        
+        # File uploader
+        uploaded_file = st.file_uploader(
+            "Choose an image file",
+            type=['jpg', 'jpeg', 'png', 'tiff', 'tif', 'bmp'],
+            help="Upload images of 2D material flakes for analysis",
+            key="main_file_upload"
+        )
+        
+        if uploaded_file is not None:
+            # Display preview and info
+            col_preview, col_info = st.columns([1, 1])
+            
+            with col_preview:
+                st.image(uploaded_file, caption=f"Preview: {uploaded_file.name}", width=200)
+            
+            with col_info:
+                st.markdown(f"**File:** {uploaded_file.name}")
+                st.markdown(f"**Size:** {uploaded_file.size / 1024:.1f} KB")
+                st.markdown(f"**Type:** {uploaded_file.type}")
+                
+                # Save button
+                if st.button("💾 Save for Analysis", key="save_main_upload"):
+                    if save_uploaded_image(uploaded_file):
+                        st.success(f"✅ Image saved! You can now reference '{uploaded_file.name}' in your chat.")
+                        st.rerun()
+                    else:
+                        st.error("❌ Failed to save image")
+        
+        # Show uploaded files
+        uploaded_images = get_uploaded_images()
+        if uploaded_images:
+            st.markdown("---")
+            st.markdown("**📋 Available Images:**")
+            st.info("📁 = Pre-existing files (persistent across sessions) | 🆕 = Current session uploads")
+            
+            for img_info in uploaded_images:
+                col_name, col_info, col_actions = st.columns([3, 1, 1])
+                
+                with col_name:
+                    # Show file source indicator
+                    source_icon = "📁" if img_info.get('source') == 'filesystem' else "🆕"
+                    source_help = "Pre-existing file" if img_info.get('source') == 'filesystem' else "Current session"
+                    
+                    st.markdown(f"{source_icon} **{img_info['name']}**")
+                    st.code(f"Analyze {img_info['name']}", language=None)  # Quick reference format
+                
+                with col_info:
+                    st.text(img_info['size'])
+                    # Show upload date
+                    upload_date = img_info.get('uploaded_at', '')[:10] if img_info.get('uploaded_at') else 'Unknown'
+                    st.caption(upload_date)
+                
+                with col_actions:
+                    if st.button("🗑️", key=f"delete_main_{img_info['name']}", help="Delete image"):
+                        if delete_uploaded_image(img_info['name']):
+                            st.success(f"Deleted {img_info['name']}")
+                            st.rerun()
+                
+                # Optional: Show image preview in expander
+                with st.expander(f"Preview {img_info['name']}", expanded=False):
+                    try:
+                        st.image(img_info['path'], width=300)
+                        st.caption(f"Uploaded: {img_info['uploaded_at'][:19]}")
+                    except Exception as e:
+                        st.error(f"Cannot preview image: {e}")
+        else:
+            st.info("No images uploaded yet. Upload images above to get started with flake analysis.")
+    
     # Show MCP tools info
-    mcp_info = st.session_state.gpt5_mini_chatbox.get_mcp_tools_info()
+    mcp_info = st.session_state.llm_chatbox.get_mcp_tools_info()
     tool_expander_title = "🔧 MCP Tools" if mcp_info.get("enabled", False) else "🔧 Future MCP Tools"
     with st.expander(tool_expander_title, expanded=False):
         
@@ -470,12 +550,12 @@ def gpt5_mini_chatbox_interface():
     with col1:
         if st.button("🆕 New Chat", key="overview_new_chat", use_container_width=True):
             st.session_state.overview_chat_messages = []
-            if st.session_state.gpt5_mini_chatbox:
-                st.session_state.gpt5_mini_chatbox.clear_conversation()
+            if st.session_state.llm_chatbox:
+                st.session_state.llm_chatbox.clear_conversation()
             st.rerun()
     
     with col2:
-        chat_summary = st.session_state.gpt5_mini_chatbox.get_conversation_summary()
+        chat_summary = st.session_state.llm_chatbox.get_conversation_summary()
         if chat_summary['conversation_active']:
             st.metric("Exchanges", chat_summary['total_exchanges'])
     
@@ -488,13 +568,18 @@ def gpt5_mini_chatbox_interface():
             if message["role"] == "user":
                 st.chat_message("user").write(message["content"])
             else:
-                # Assistant message with optional reasoning display
+                # Assistant message with collapsible content for long responses
                 with st.chat_message("assistant"):
-                    st.write(message["content"])
+                    render_collapsible_message(
+                        content=message["content"],
+                        message_list=st.session_state.overview_chat_messages,
+                        message=message,
+                        prefix="expand_overview_msg"
+                    )
                     
                     # Show reasoning if available and enabled
                     if (message.get("reasoning") and 
-                        st.session_state.gpt5_mini_chatbox.enable_reasoning_display() and
+                        st.session_state.llm_chatbox.enable_reasoning_display() and
                         message["reasoning"].get("available")):
                         
                         with st.expander("🧠 Reasoning", expanded=False):
@@ -539,7 +624,7 @@ def gpt5_mini_chatbox_interface():
     # Suggested questions for new conversations
     if not st.session_state.overview_chat_messages:
         st.markdown("**💡 Suggested questions:**")
-        suggestions = st.session_state.gpt5_mini_chatbox.get_suggested_prompts()
+        suggestions = st.session_state.llm_chatbox.get_suggested_prompts()
         
         # Display suggestions as clickable buttons in two columns
         suggestion_cols = st.columns(2)
@@ -566,8 +651,8 @@ def handle_overview_chat_message(user_message: str):
         })
         
         # Get AI response
-        with st.spinner("GPT-5-mini thinking..."):
-            response = asyncio.run(st.session_state.gpt5_mini_chatbox.chat(user_message))
+        with st.spinner("Model thinking..."):
+            response = asyncio.run(st.session_state.llm_chatbox.chat(user_message))
         
         if response['success']:
             # Add assistant response to display
@@ -696,7 +781,7 @@ def save_uploaded_image(uploaded_file) -> bool:
         with open(file_path, "wb") as f:
             f.write(uploaded_file.getbuffer())
         
-        # Store file info in session state for GPT-5-mini reference
+        # Store file info in session state for GPT-5 reference
         if "uploaded_flake_images" not in st.session_state:
             st.session_state.uploaded_flake_images = []
         
@@ -717,18 +802,91 @@ def save_uploaded_image(uploaded_file) -> bool:
         return False
 
 def get_uploaded_images() -> List[Dict]:
-    """Get list of uploaded images"""
+    """Get list of uploaded images from filesystem and session"""
+    uploads_dir = os.path.join(os.getcwd(), "uploads", "flake_images")
+    
+    # Initialize session state if needed
     if "uploaded_flake_images" not in st.session_state:
         st.session_state.uploaded_flake_images = []
     
-    # Verify files still exist
-    valid_images = []
+    # Scan actual filesystem for all image files
+    all_images = {}  # Use dict to avoid duplicates, keyed by filename
+    
+    # Add files from filesystem
+    if os.path.exists(uploads_dir):
+        for filename in os.listdir(uploads_dir):
+            file_path = os.path.join(uploads_dir, filename)
+            
+            # Check if it's an image file
+            if os.path.isfile(file_path) and filename.lower().endswith(('.jpg', '.jpeg', '.png', '.tiff', '.tif', '.bmp')):
+                try:
+                    file_stat = os.stat(file_path)
+                    all_images[filename] = {
+                        'name': filename,
+                        'path': file_path,
+                        'size': f"{file_stat.st_size / 1024:.1f} KB",
+                        'type': f"image/{filename.split('.')[-1].lower()}",
+                        'uploaded_at': datetime.fromtimestamp(file_stat.st_mtime).isoformat(),
+                        'source': 'filesystem'
+                    }
+                except Exception as e:
+                    continue  # Skip files that can't be read
+    
+    # Update/merge with session state data (which may have additional metadata)
     for img_info in st.session_state.uploaded_flake_images:
         if os.path.exists(img_info['path']):
-            valid_images.append(img_info)
+            filename = img_info['name']
+            # Update with session metadata if available
+            if filename in all_images:
+                all_images[filename].update({
+                    'uploaded_at': img_info.get('uploaded_at', all_images[filename]['uploaded_at']),
+                    'source': 'session'
+                })
+            else:
+                # File from session but not found in directory scan
+                all_images[filename] = img_info
     
+    # Convert back to list and sort by upload time (newest first)
+    valid_images = list(all_images.values())
+    valid_images.sort(key=lambda x: x.get('uploaded_at', ''), reverse=True)
+    
+    # Update session state with merged data
     st.session_state.uploaded_flake_images = valid_images
+    
     return valid_images
+
+def render_collapsible_message(content: str, message_list: list, message: dict, prefix: str = "expand_msg") -> None:
+    """Render a message with collapsible functionality for long content"""
+    content_length = len(content)
+    
+    # Get threshold from configuration (default to 800 if not available)
+    collapse_threshold = 800
+    try:
+        if hasattr(st.session_state, 'llm_chatbox') and st.session_state.llm_chatbox:
+            collapse_threshold = st.session_state.llm_chatbox.config.get(
+                "conversation_settings", {}
+            ).get("auto_collapse_threshold", 800)
+    except:
+        pass  # Use default if config unavailable
+    
+    if content_length > collapse_threshold:
+        # Show truncated version with expand option
+        preview_length = min(300, collapse_threshold // 3)
+        preview_text = content[:preview_length] + "..."
+        
+        # Show preview by default
+        st.write(preview_text)
+        
+        # Add visual indicator for collapsed content
+        st.caption(f"💬 {content_length:,} characters total - Click below to expand full response")
+        
+        # Collapsible full response
+        with st.expander(f"📄 Show Full Response", expanded=False):
+            st.write(content)
+    else:
+        # Short response - show directly
+        st.write(content)
+
 
 def delete_uploaded_image(filename: str) -> bool:
     """Delete an uploaded image"""
@@ -896,51 +1054,37 @@ def tools_interface():
             else:
                 st.warning("🔴 Not configured")
         
-        # Image upload section (only show when tool is active)
+        # Image management section (only show when tool is active)
         if flake_status.get('active', False):
             st.markdown("---")
-            st.markdown("**📁 Image Upload:**")
-            
-            uploaded_file = st.file_uploader(
-                "Upload 2D flake image for analysis",
-                type=['jpg', 'jpeg', 'png', 'tiff', 'bmp'],
-                help="Upload an image of your 2D material flake for quality classification",
-                key="flake_image_upload"
-            )
-            
-            if uploaded_file is not None:
-                # Display image preview
-                col_img, col_info = st.columns([1, 1])
-                
-                with col_img:
-                    st.image(uploaded_file, caption=f"Preview: {uploaded_file.name}", width=200)
-                
-                with col_info:
-                    st.markdown(f"**File:** {uploaded_file.name}")
-                    st.markdown(f"**Size:** {uploaded_file.size / 1024:.1f} KB")
-                    st.markdown(f"**Type:** {uploaded_file.type}")
-                
-                # Save uploaded file
-                if st.button("💾 Save for Analysis", key="save_flake_image"):
-                    if save_uploaded_image(uploaded_file):
-                        st.success(f"✅ Image saved! You can now ask GPT-5-mini to analyze '{uploaded_file.name}'")
-                        st.info("💡 **Try asking:** 'Analyze the uploaded flake image using the hBN_monolayer model'")
-                    else:
-                        st.error("❌ Failed to save image")
+            st.markdown("**📁 Image Management:**")
+            st.info("💡 Upload flake images in the **Overview tab → File Upload & Management** section, then reference them by name in the AI Assistant chat.")
             
             # Show uploaded images
             uploaded_images = get_uploaded_images()
             if uploaded_images:
-                st.markdown("**📋 Available Images:**")
+                st.markdown("**📋 Currently Available Images:**")
+                st.caption("📁 = Persistent files | 🆕 = Current session")
+                
                 for img_info in uploaded_images:
-                    col_name, col_actions = st.columns([3, 1])
+                    col_name, col_info, col_actions = st.columns([2, 1, 1])
                     with col_name:
-                        st.markdown(f"• {img_info['name']} ({img_info['size']})")
+                        # Show file source indicator
+                        source_icon = "📁" if img_info.get('source') == 'filesystem' else "🆕"
+                        st.markdown(f"{source_icon} **{img_info['name']}**")
+                    with col_info:
+                        st.text(f"{img_info['size']}")
+                        # Show date
+                        upload_date = img_info.get('uploaded_at', '')[:10] if img_info.get('uploaded_at') else ''
+                        if upload_date:
+                            st.caption(upload_date)
                     with col_actions:
-                        if st.button("🗑️", key=f"delete_{img_info['name']}", help="Delete image"):
+                        if st.button("🗑️", key=f"delete_tools_{img_info['name']}", help="Delete image"):
                             if delete_uploaded_image(img_info['name']):
                                 st.success(f"Deleted {img_info['name']}")
                                 st.rerun()
+            else:
+                st.warning("No images uploaded yet. Go to **Overview tab → File Upload & Management** to upload images.")
     
     with col2:
         current_state = flake_status.get('active', False)
@@ -970,9 +1114,9 @@ def tools_interface():
     st.info("""
     **💡 Note:** Tool activation changes will take effect when:
     - The MCP server is restarted, or
-    - GPT-5-mini creates a new conversation
+    - AI Assistant creates a new conversation
     
-    Currently active tools are available to GPT-5-mini for use.
+    Currently active tools are available to the AI Assistant for use.
     """)
     
     # Debug information (collapsible)
