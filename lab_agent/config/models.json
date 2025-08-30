@@ -1,0 +1,50 @@
+{
+  "arxivFilterModel": {
+    "name": "gpt-4o",
+    "provider": "openai",
+    "description": "Model used for scoring and filtering arXiv papers",
+    "maxTokens": 300,
+    "temperature": 0.1,
+    "purpose": "paper_scoring"
+  },
+  "chatModel": {
+    "name": "gpt-4o",
+    "provider": "openai", 
+    "description": "Model used for chatting about arXiv papers",
+    "maxTokens": 1500,
+    "temperature": 0.3,
+    "purpose": "chat_conversation"
+  },
+  "fallbackModels": {
+    "arxivFilter": [
+      {
+        "name": "gpt-4",
+        "provider": "openai"
+      },
+      {
+        "name": "gpt-3.5-turbo",
+        "provider": "openai"
+      }
+    ],
+    "chat": [
+      {
+        "name": "gpt-4",
+        "provider": "openai"
+      },
+      {
+        "name": "gpt-3.5-turbo",
+        "provider": "openai"
+      }
+    ]
+  },
+  "modelSettings": {
+    "rateLimiting": {
+      "requestsPerMinute": 60,
+      "tokensPerMinute": 90000
+    },
+    "retrySettings": {
+      "maxRetries": 3,
+      "backoffMultiplier": 2
+    }
+  }
+}
