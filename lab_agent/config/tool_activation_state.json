@@ -1,0 +1,19 @@
+{
+  "last_updated": "2025-08-30T17:19:21.829334",
+  "tools": {
+    "arxiv_daily": {
+      "active": true,
+      "name": "ArXiv Daily",
+      "description": "Automated paper recommendations with AI scoring",
+      "category": "research"
+    },
+    "flake_2d": {
+      "active": true,
+      "name": "2D Flake Classification",
+      "description": "AI-powered quality assessment via external MCP server",
+      "category": "analysis",
+      "server_url": "http://0.0.0.0:8000",
+      "connection_status": "connected"
+    }
+  }
+}

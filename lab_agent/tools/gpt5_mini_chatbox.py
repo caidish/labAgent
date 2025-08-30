@@ -4,6 +4,7 @@ import os
 import asyncio
 from typing import List, Dict, Optional, Any
 from .gpt5_mini_client import GPT5MiniClient
+from ..utils.tool_manager import ToolManager
 
 
 class GPT5MiniChatbox:
@@ -373,25 +374,72 @@ Always provide helpful context and summaries when using these tools.
         }
     
     def get_mcp_tools_info(self) -> Dict[str, Any]:
-        """Get information about MCP tools"""
+        """Get information about MCP tools (only show activated tools)"""
         mcp_config = self.config.get("mcp_integration", {})
         enabled = mcp_config.get("enabled", False)
         
         if enabled:
-            active_tools = mcp_config.get("arxiv_daily_tools", [])
+            # Check activation status using ToolManager
+            tool_manager = ToolManager()
+            
+            # Only include tools that are currently activated
+            arxiv_tools = []
+            flake_tools = []
+            
+            if tool_manager.is_tool_active("arxiv_daily"):
+                arxiv_tools = mcp_config.get("arxiv_daily_tools", [])
+            
+            if tool_manager.is_tool_active("flake_2d"):
+                flake_tools = mcp_config.get("flake_2d_tools", [])
+            
             planned_tools = mcp_config.get("planned_tools", [])
+            
+            # Combine active tools from both categories
+            all_active_tools = []
+            
+            # Add ArXiv tools with category label (only if activated)
+            for tool in arxiv_tools:
+                tool_with_category = tool.copy()
+                tool_with_category["category"] = "ArXiv Daily"
+                all_active_tools.append(tool_with_category)
+            
+            # Add 2D flake tools with category label (only if activated)
+            for tool in flake_tools:
+                tool_with_category = tool.copy()
+                tool_with_category["category"] = "2D Flake Classification"
+                all_active_tools.append(tool_with_category)
+            
+            # Build status message based on actually active tools
+            status_parts = []
+            if arxiv_tools:
+                status_parts.append(f"{len(arxiv_tools)} ArXiv Daily tools")
+            if flake_tools:
+                status_parts.append(f"{len(flake_tools)} 2D Flake tools")
+            
+            if status_parts:
+                status = f"MCP integration active with {' and '.join(status_parts)}"
+            else:
+                status = "MCP integration enabled but no tools are activated"
+            
+            # Get activation summary for additional info
+            activation_summary = tool_manager.get_activation_summary()
             
             return {
                 "enabled": True,
-                "active_tools": active_tools,
+                "active_tools": all_active_tools,
+                "arxiv_tools": arxiv_tools,
+                "flake_2d_tools": flake_tools,
                 "planned_tools": planned_tools,
-                "status": f"MCP integration active with {len(active_tools)} ArXiv Daily tools",
-                "mcp_client_available": self.mcp_client is not None
+                "status": status,
+                "mcp_client_available": self.mcp_client is not None,
+                "activation_summary": activation_summary
             }
         else:
             return {
                 "enabled": False,
                 "active_tools": [],
+                "arxiv_tools": [],
+                "flake_2d_tools": [],
                 "planned_tools": mcp_config.get("planned_tools", []),
                 "status": "MCP integration disabled"
             }

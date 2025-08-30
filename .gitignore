@@ -148,3 +148,5 @@ logs/
 *.db
 *.sqlite
 /reports
+/uploads
+activate_env.sh

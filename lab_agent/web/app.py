@@ -4,6 +4,7 @@ import nest_asyncio
 from dotenv import load_dotenv
 from datetime import datetime
 import json
+from typing import List, Dict
 
 import sys
 import os
@@ -11,6 +12,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from lab_agent.main import LabAgent
 from lab_agent.utils import Config
+from lab_agent.utils.tool_manager import ToolManager
 from lab_agent.agents.arxiv_daily_agent import ArxivDailyAgent
 from lab_agent.tools.arxiv_chat import ArxivChat
 from lab_agent.tools.gpt5_mini_chatbox import GPT5MiniChatbox
@@ -69,6 +71,10 @@ def main():
     if "overview_chat_messages" not in st.session_state:
         st.session_state.overview_chat_messages = []
     
+    # Initialize tool manager
+    if "tool_manager" not in st.session_state:
+        st.session_state.tool_manager = ToolManager()
+    
     # Main navigation
     tabs = st.tabs(["🏠 Overview", "📚 ArXiv Daily", "🔧 Tools", "📋 Logs"])
     
@@ -122,10 +128,11 @@ def main():
             st.markdown("### Available Tools")
             tools = [
                 "📚 ArXiv Daily - Automated paper recommendations with AI scoring",
+                "🔬 2D Flake Classification - AI-powered quality assessment via MCP server",
                 "🕷️ Web Scraper - Extract data from web pages",
                 "🔍 ArXiv Parser - Parse research papers from ArXiv API",
                 "🤖 Multi-model AI - OpenAI GPT-4 and Google Gemini integration",
-                "🤖 GPT-5-mini Assistant - AI chatbox with active MCP tools for ArXiv Daily"
+                "🤖 GPT-5-mini Assistant - AI chatbox with MCP tools for ArXiv Daily & 2D Flakes"
             ]
             for tool in tools:
                 st.markdown(f"- {tool}")
@@ -137,8 +144,7 @@ def main():
         arxiv_daily_interface()
         
     with tabs[2]:
-        st.subheader("Available Tools")
-        st.info("Individual tool interfaces will be added here")
+        tools_interface()
         
     with tabs[3]:
         st.subheader("System Logs")
@@ -427,11 +433,20 @@ def gpt5_mini_chatbox_interface():
         if mcp_info.get("enabled", False):
             st.success(mcp_info["status"])
             
-            # Show active tools
-            active_tools = mcp_info.get("active_tools", [])
-            if active_tools:
-                st.markdown("**🟢 Active ArXiv Daily Tools:**")
-                for tool in active_tools:
+            # Show ArXiv Daily tools
+            arxiv_tools = mcp_info.get("arxiv_tools", [])
+            if arxiv_tools:
+                st.markdown("**📚 Active ArXiv Daily Tools:**")
+                for tool in arxiv_tools:
+                    status_icon = "🟢" if tool.get("status") == "active" else "🟡"
+                    st.markdown(f"- {status_icon} **{tool['name']}**: {tool['description']}")
+                st.markdown("---")
+            
+            # Show 2D Flake tools
+            flake_tools = mcp_info.get("flake_2d_tools", [])
+            if flake_tools:
+                st.markdown("**🔬 Active 2D Flake Classification Tools:**")
+                for tool in flake_tools:
                     status_icon = "🟢" if tool.get("status") == "active" else "🟡"
                     st.markdown(f"- {status_icon} **{tool['name']}**: {tool['description']}")
                 st.markdown("---")
@@ -667,6 +682,302 @@ def generate_daily_report_quick():
                 
         except Exception as e:
             st.error(f"❌ Error generating report: {e}")
+
+
+def save_uploaded_image(uploaded_file) -> bool:
+    """Save uploaded image to uploads directory"""
+    try:
+        # Create uploads directory if it doesn't exist
+        uploads_dir = os.path.join(os.getcwd(), "uploads", "flake_images")
+        os.makedirs(uploads_dir, exist_ok=True)
+        
+        # Save file with original name
+        file_path = os.path.join(uploads_dir, uploaded_file.name)
+        with open(file_path, "wb") as f:
+            f.write(uploaded_file.getbuffer())
+        
+        # Store file info in session state for GPT-5-mini reference
+        if "uploaded_flake_images" not in st.session_state:
+            st.session_state.uploaded_flake_images = []
+        
+        # Add to list if not already there
+        existing_names = [img['name'] for img in st.session_state.uploaded_flake_images]
+        if uploaded_file.name not in existing_names:
+            st.session_state.uploaded_flake_images.append({
+                'name': uploaded_file.name,
+                'path': file_path,
+                'size': f"{uploaded_file.size / 1024:.1f} KB",
+                'type': uploaded_file.type,
+                'uploaded_at': datetime.now().isoformat()
+            })
+        
+        return True
+    except Exception as e:
+        st.error(f"Error saving image: {e}")
+        return False
+
+def get_uploaded_images() -> List[Dict]:
+    """Get list of uploaded images"""
+    if "uploaded_flake_images" not in st.session_state:
+        st.session_state.uploaded_flake_images = []
+    
+    # Verify files still exist
+    valid_images = []
+    for img_info in st.session_state.uploaded_flake_images:
+        if os.path.exists(img_info['path']):
+            valid_images.append(img_info)
+    
+    st.session_state.uploaded_flake_images = valid_images
+    return valid_images
+
+def delete_uploaded_image(filename: str) -> bool:
+    """Delete an uploaded image"""
+    try:
+        if "uploaded_flake_images" not in st.session_state:
+            return False
+        
+        # Find and remove from session state
+        img_to_remove = None
+        for img_info in st.session_state.uploaded_flake_images:
+            if img_info['name'] == filename:
+                img_to_remove = img_info
+                break
+        
+        if img_to_remove:
+            # Remove file
+            if os.path.exists(img_to_remove['path']):
+                os.remove(img_to_remove['path'])
+            
+            # Remove from session state
+            st.session_state.uploaded_flake_images.remove(img_to_remove)
+            return True
+        
+        return False
+    except Exception as e:
+        st.error(f"Error deleting image: {e}")
+        return False
+
+def tools_interface():
+    """Tools activation and management interface"""
+    st.subheader("🔧 Tool Management")
+    st.markdown("Activate or deactivate MCP tools for the Lab Agent system")
+    
+    tool_manager = st.session_state.tool_manager
+    
+    # Refresh tool manager state
+    if st.button("🔄 Refresh Tool Status", use_container_width=True):
+        st.session_state.tool_manager = ToolManager()
+        st.rerun()
+    
+    # Get activation summary
+    summary = tool_manager.get_activation_summary()
+    
+    # Display summary
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Total Tools", summary["total_tools"])
+    with col2:
+        st.metric("Active Tools", summary["active_tools"])
+    with col3:
+        st.metric("Inactive Tools", summary["inactive_tools"])
+    
+    st.markdown("---")
+    
+    # ArXiv Daily Tools section
+    st.markdown("### 📚 ArXiv Daily Tools")
+    arxiv_status = tool_manager.get_tool_status("arxiv_daily")
+    
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.markdown(f"**{arxiv_status.get('name', 'ArXiv Daily')}**")
+        st.markdown(f"*{arxiv_status.get('description', 'Paper recommendations and analysis')}*")
+    
+    with col2:
+        current_state = arxiv_status.get('active', False)
+        if current_state:
+            st.success("🟢 Active")
+            if st.button("Deactivate", key="deactivate_arxiv"):
+                tool_manager.deactivate_tool("arxiv_daily")
+                st.success("ArXiv Daily tools deactivated")
+                st.rerun()
+        else:
+            st.warning("🟡 Inactive")
+            if st.button("Activate", key="activate_arxiv"):
+                tool_manager.activate_tool("arxiv_daily")
+                st.success("ArXiv Daily tools activated")
+                st.rerun()
+    
+    st.markdown("---")
+    
+    # 2D Flake Classification Tools section
+    st.markdown("### 🔬 2D Flake Classification Tools")
+    flake_status = tool_manager.get_tool_status("flake_2d")
+    
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.markdown(f"**{flake_status.get('name', '2D Flake Classification')}**")
+        st.markdown(f"*{flake_status.get('description', 'AI-powered material analysis')}*")
+        
+        # Server configuration for 2D flake tool
+        if flake_status.get('active', False) or st.session_state.get('show_flake_config', False):
+            st.markdown("**Server Configuration:**")
+            
+            current_url = flake_status.get('server_url', 'http://0.0.0.0:8000')
+            server_url = st.text_input(
+                "External MCP Server URL", 
+                value=current_url,
+                help="URL of the external 2D flake classification MCP server",
+                key="flake_server_url"
+            )
+            
+            col_test, col_save = st.columns(2)
+            with col_test:
+                if st.button("🔗 Test Connection", key="test_flake_connection"):
+                    if server_url:
+                        # Ensure flake_2d tools are activated before testing
+                        if not flake_status.get('active', False):
+                            st.warning("⚠️ Please activate 2D Flake tools first before testing connection")
+                        else:
+                            # Test actual MCP connection
+                            with st.spinner(f"Testing connection to {server_url}..."):
+                                try:
+                                    # Get MCP client and test connection
+                                    from lab_agent.mcp.client import get_mcp_client
+                                    mcp_client = get_mcp_client()
+                                    
+                                    # Refresh tools to ensure flake tools are loaded
+                                    mcp_client.refresh_tools()
+                                    
+                                    # Call the actual MCP tool to test connection
+                                    result = asyncio.run(mcp_client.call_tool(
+                                        "connect_2d_flake_server", 
+                                        {"server_url": server_url, "test_connection": True}
+                                    ))
+                                    
+                                    if result.get("success"):
+                                        tool_manager.set_flake_2d_server(server_url, "connected")
+                                        st.success(f"🟢 Successfully connected to {server_url}")
+                                        st.info(f"ℹ️ Server response: {result.get('message', 'Connection successful')}")
+                                        st.rerun()
+                                    else:
+                                        error_msg = result.get("error", "Unknown connection error")
+                                        tool_manager.set_flake_2d_server(server_url, "failed")
+                                        st.error(f"🔴 Connection failed: {error_msg}")
+                                        
+                                        # Show available tools for debugging
+                                        available_tools = result.get('available_tools', [])
+                                        if available_tools:
+                                            st.info(f"Available MCP tools: {[tool.get('name') for tool in available_tools]}")
+                                        
+                                except Exception as e:
+                                    tool_manager.set_flake_2d_server(server_url, "failed")
+                                    st.error(f"🔴 Connection test failed: {str(e)}")
+                                    st.error(f"Debug info: Check if MCP client is properly configured")
+                    else:
+                        st.error("Please enter a server URL")
+            
+            with col_save:
+                if st.button("💾 Save Config", key="save_flake_config"):
+                    if server_url:
+                        tool_manager.set_flake_2d_server(server_url, "configured")
+                        st.success("Configuration saved")
+                        st.rerun()
+                    else:
+                        st.error("Please enter a server URL")
+            
+            # Show current connection status
+            conn_status = flake_status.get('connection_status', 'disconnected')
+            if conn_status == "connected":
+                st.success(f"🟢 Connected to: {flake_status.get('server_url', 'N/A')}")
+            elif conn_status == "configured":
+                st.info(f"🟡 Configured: {flake_status.get('server_url', 'N/A')}")
+            elif conn_status == "failed":
+                st.error(f"🔴 Connection failed: {flake_status.get('server_url', 'N/A')}")
+            else:
+                st.warning("🔴 Not configured")
+        
+        # Image upload section (only show when tool is active)
+        if flake_status.get('active', False):
+            st.markdown("---")
+            st.markdown("**📁 Image Upload:**")
+            
+            uploaded_file = st.file_uploader(
+                "Upload 2D flake image for analysis",
+                type=['jpg', 'jpeg', 'png', 'tiff', 'bmp'],
+                help="Upload an image of your 2D material flake for quality classification",
+                key="flake_image_upload"
+            )
+            
+            if uploaded_file is not None:
+                # Display image preview
+                col_img, col_info = st.columns([1, 1])
+                
+                with col_img:
+                    st.image(uploaded_file, caption=f"Preview: {uploaded_file.name}", width=200)
+                
+                with col_info:
+                    st.markdown(f"**File:** {uploaded_file.name}")
+                    st.markdown(f"**Size:** {uploaded_file.size / 1024:.1f} KB")
+                    st.markdown(f"**Type:** {uploaded_file.type}")
+                
+                # Save uploaded file
+                if st.button("💾 Save for Analysis", key="save_flake_image"):
+                    if save_uploaded_image(uploaded_file):
+                        st.success(f"✅ Image saved! You can now ask GPT-5-mini to analyze '{uploaded_file.name}'")
+                        st.info("💡 **Try asking:** 'Analyze the uploaded flake image using the hBN_monolayer model'")
+                    else:
+                        st.error("❌ Failed to save image")
+            
+            # Show uploaded images
+            uploaded_images = get_uploaded_images()
+            if uploaded_images:
+                st.markdown("**📋 Available Images:**")
+                for img_info in uploaded_images:
+                    col_name, col_actions = st.columns([3, 1])
+                    with col_name:
+                        st.markdown(f"• {img_info['name']} ({img_info['size']})")
+                    with col_actions:
+                        if st.button("🗑️", key=f"delete_{img_info['name']}", help="Delete image"):
+                            if delete_uploaded_image(img_info['name']):
+                                st.success(f"Deleted {img_info['name']}")
+                                st.rerun()
+    
+    with col2:
+        current_state = flake_status.get('active', False)
+        if current_state:
+            st.success("🟢 Active")
+            if st.button("Deactivate", key="deactivate_flake"):
+                tool_manager.deactivate_tool("flake_2d")
+                st.success("2D Flake tools deactivated")
+                st.rerun()
+        else:
+            st.warning("🟡 Inactive")
+            if st.button("Activate", key="activate_flake"):
+                tool_manager.activate_tool("flake_2d")
+                st.session_state.show_flake_config = True
+                st.success("2D Flake tools activated")
+                st.rerun()
+    
+    # Show configuration button for inactive flake tool
+    if not flake_status.get('active', False) and not st.session_state.get('show_flake_config', False):
+        if st.button("⚙️ Configure 2D Flake Server", key="config_flake"):
+            st.session_state.show_flake_config = True
+            st.rerun()
+    
+    st.markdown("---")
+    
+    # Tool activation effects notice
+    st.info("""
+    **💡 Note:** Tool activation changes will take effect when:
+    - The MCP server is restarted, or
+    - GPT-5-mini creates a new conversation
+    
+    Currently active tools are available to GPT-5-mini for use.
+    """)
+    
+    # Debug information (collapsible)
+    with st.expander("🔧 Debug Information", expanded=False):
+        st.json(tool_manager.activation_state)
 
 
 if __name__ == "__main__":

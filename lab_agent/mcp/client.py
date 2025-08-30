@@ -6,6 +6,8 @@ import asyncio
 import logging
 from typing import Dict, Any, Optional, List
 from .tools.arxiv_daily_tools import ArxivDailyTools
+from .tools.flake_2d_client import Flake2DClient
+from ..utils.tool_manager import ToolManager
 
 
 class MCPClient:
@@ -14,16 +16,30 @@ class MCPClient:
     def __init__(self):
         self.logger = logging.getLogger("mcp.client")
         self.tool_groups = {}
+        self.tool_manager = ToolManager()
         self._initialize_tools()
     
     def _initialize_tools(self):
-        """Initialize available tool groups"""
+        """Initialize available tool groups based on activation state"""
         try:
-            # Initialize ArXiv Daily tools
-            self.tool_groups["arxiv_daily"] = ArxivDailyTools()
-            self.logger.info("MCP client initialized with ArXiv Daily tools")
+            initialized_count = 0
+            
+            # Initialize ArXiv Daily tools if active
+            if self.tool_manager.is_tool_active("arxiv_daily"):
+                self.tool_groups["arxiv_daily"] = ArxivDailyTools()
+                initialized_count += 1
+                self.logger.info("MCP client: Initialized ArXiv Daily tools")
+            
+            # Initialize 2D Flake client tools if active
+            if self.tool_manager.is_tool_active("flake_2d"):
+                self.tool_groups["flake_2d_client"] = Flake2DClient()
+                initialized_count += 1
+                self.logger.info("MCP client: Initialized 2D Flake client tools")
+            
+            self.logger.info(f"MCP client initialized with {initialized_count} active tool groups")
         except Exception as e:
             self.logger.error(f"Failed to initialize MCP tools: {e}")
+            raise
     
     async def call_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """Call an MCP tool by name"""
@@ -71,6 +87,25 @@ class MCPClient:
                 self.logger.error(f"Error getting tools from group {group_name}: {e}")
         
         return tools
+    
+    async def list_tools(self) -> List[Dict[str, Any]]:
+        """List all available tools (async version for compatibility)"""
+        return self.get_available_tools()
+    
+    def refresh_tools(self):
+        """Refresh tool groups based on current activation state"""
+        self.logger.info("🔄 MCP CLIENT: Refreshing tool groups")
+        
+        # Clear existing tools
+        old_groups = list(self.tool_groups.keys())
+        self.tool_groups.clear()
+        
+        # Reload tool manager and reinitialize
+        self.tool_manager = ToolManager()
+        self._initialize_tools()
+        
+        new_groups = list(self.tool_groups.keys())
+        self.logger.info(f"🔄 MCP CLIENT: Tool groups refreshed: {old_groups} → {new_groups}")
     
     def get_tools_by_group(self, group_name: str) -> List[Dict[str, Any]]:
         """Get tools for a specific group"""

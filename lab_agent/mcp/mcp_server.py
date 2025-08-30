@@ -14,6 +14,8 @@ from mcp.types import TextContent
 from mcp import Tool
 
 from .tools.arxiv_daily_tools import ArxivDailyTools
+from .tools.flake_2d_client import Flake2DClient
+from ..utils.tool_manager import ToolManager
 
 
 class MCPServer:
@@ -22,8 +24,9 @@ class MCPServer:
     def __init__(self, config_path: str = None):
         self.config = self._load_config(config_path)
         self.server = Server(self.config["server"]["name"])
-        self.tools: Dict[str, ArxivDailyTools] = {}
+        self.tools: Dict[str, Any] = {}
         self.logger = self._setup_logging()
+        self.tool_manager = ToolManager()  # Add tool manager
         
         # Initialize tools
         self._initialize_tools()
@@ -77,13 +80,22 @@ class MCPServer:
         return logger
     
     def _initialize_tools(self):
-        """Initialize all enabled tools"""
+        """Initialize only activated tools"""
         try:
-            # Initialize ArXiv Daily tools
-            arxiv_tools = ArxivDailyTools()
-            self.tools["arxiv_daily"] = arxiv_tools
+            # Initialize ArXiv Daily tools if active
+            if self.tool_manager.is_tool_active("arxiv_daily"):
+                arxiv_tools = ArxivDailyTools()
+                self.tools["arxiv_daily"] = arxiv_tools
+                self.logger.info("Initialized ArXiv Daily tools")
             
-            self.logger.info(f"Initialized {len(self.tools)} tool groups")
+            # Initialize 2D Flake client tools if active
+            if self.tool_manager.is_tool_active("flake_2d"):
+                flake_2d_client = Flake2DClient()
+                self.tools["flake_2d_client"] = flake_2d_client
+                self.logger.info("Initialized 2D Flake client tools")
+            
+            active_tools = self.tool_manager.get_active_tools()
+            self.logger.info(f"Initialized {len(self.tools)} active tool groups: {list(active_tools.keys())}")
         except Exception as e:
             self.logger.error(f"Failed to initialize tools: {e}")
             raise
@@ -101,6 +113,11 @@ class MCPServer:
                 arxiv_daily_tools = self.tools["arxiv_daily"].get_tool_definitions()
                 tools.extend(arxiv_daily_tools)
             
+            # Get tools from 2D Flake client
+            if "flake_2d_client" in self.tools:
+                flake_2d_tools = self.tools["flake_2d_client"].get_tool_definitions()
+                tools.extend(flake_2d_tools)
+            
             self.logger.info(f"Listed {len(tools)} available tools")
             return tools
         
@@ -110,14 +127,27 @@ class MCPServer:
             self.logger.info(f"Tool call requested: {name} with args: {arguments}")
             
             try:
-                # Route tool calls to appropriate handler
-                if name in ["read_daily_report", "generate_daily_report", "list_available_reports"]:
+                result = None
+                
+                # Route ArXiv Daily tool calls
+                arxiv_tools = ["read_daily_report", "generate_daily_report", "list_available_reports", "search_papers_by_author"]
+                if name in arxiv_tools:
                     if "arxiv_daily" not in self.tools:
                         raise ValueError("ArXiv Daily tools not available")
-                    
                     result = await self.tools["arxiv_daily"].execute_tool(name, arguments)
+                
+                # Route 2D Flake client tool calls
+                elif name in ["connect_2d_flake_server", "get_2d_flake_models", "upload_2d_flake_image", 
+                              "classify_2d_flake", "get_2d_flake_history", "get_2d_flake_server_status"]:
+                    if "flake_2d_client" not in self.tools:
+                        raise ValueError("2D Flake client tools not available")
+                    result = await self.tools["flake_2d_client"].execute_tool(name, arguments)
+                
                 else:
                     raise ValueError(f"Unknown tool: {name}")
+                
+                if result is None:
+                    raise ValueError(f"No result returned for tool: {name}")
                 
                 # Format response as TextContent
                 response_text = json.dumps(result, indent=2)
@@ -153,6 +183,25 @@ class MCPServer:
         except Exception as e:
             self.logger.error(f"Server error: {e}")
             raise
+    
+    def refresh_tools(self):
+        """Refresh tools based on current activation state"""
+        self.logger.info("Refreshing tool activation state")
+        self.tool_manager = ToolManager()  # Reload activation state
+        
+        # Clear existing tools
+        old_tools = list(self.tools.keys())
+        self.tools.clear()
+        
+        # Reinitialize tools
+        self._initialize_tools()
+        
+        new_tools = list(self.tools.keys())
+        self.logger.info(f"Tool refresh: {old_tools} -> {new_tools}")
+    
+    def get_tool_manager(self) -> ToolManager:
+        """Get the tool manager instance"""
+        return self.tool_manager
     
     def shutdown(self):
         """Shutdown the MCP server"""
