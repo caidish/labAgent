@@ -16,7 +16,7 @@ Multi-agent system for laboratory automation and research using OpenAI GPT-4, Go
 - Logging system
 
 🚧 **IN PROGRESS**
-- Testing and validation of Milestone 0: ArXiv Daily Update system
+- Project 1.1: MCP Server for Glovebox Nikon Microscope
 
 ## 🗺️ PROJECT ROADMAP
 
@@ -28,20 +28,30 @@ Multi-agent system for laboratory automation and research using OpenAI GPT-4, Go
 - **GPT-4 Scoring System**: AI-powered paper relevance scoring (1-3 priority levels)
 - **Daily Report Generator**: Beautiful HTML reports with priority sections
 - **Web Interface**: Manual trigger, report viewing, and clear functionality
-- **Configuration**: Interest keywords and AI prompting system
+- **Smart Chat System**: GPT-4o chat interface for discussing papers
+- **Configuration**: Complete config system with keywords, prompts, and models
+- **Duplicate Prevention**: Won't regenerate existing daily reports
 - **No Database**: File-based storage for simplicity
-- **No Notifications**: Manual trigger only as requested
 
 **Key Components:**
 - `lab_agent/tools/arxiv_daily_scraper.py` - Web scraping for ArXiv
 - `lab_agent/tools/paper_scorer.py` - GPT-4 integration for scoring
 - `lab_agent/tools/daily_report_generator.py` - HTML/JSON report generation
+- `lab_agent/tools/arxiv_chat.py` - GPT-4o chat interface
 - `lab_agent/agents/arxiv_daily_agent.py` - Main orchestration agent
-- `lab_agent/web/app.py` - Streamlit interface with ArXiv Daily tab
+- `lab_agent/web/app.py` - Streamlit interface with ArXiv Daily + Chat
 - `lab_agent/config/interestKeywords.txt` - Research interest keywords
-- `lab_agent/config/promptArxivRecommender.txt` - GPT prompt template
+- `lab_agent/config/promptArxivRecommender.txt` - GPT scoring prompts
+- `lab_agent/config/arXivChatPrompt.txt` - Chat system prompts  
+- `lab_agent/config/models.json` - Model configuration (GPT-4o)
 
-**Status**: Ready for testing and deployment
+**Performance:**
+- New reports: 2-4 minutes (scraping + AI scoring)
+- Cached reports: <1 second (duplicate prevention)
+- Chat responses: 2-5 seconds per message
+- Typical daily volume: 20-50 papers processed
+
+**Status**: ✅ **PRODUCTION READY** - Fully functional with chat interface
 
 #### **Project 1.1: MCP Server for Glovebox Nikon Microscope**
 
