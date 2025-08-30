@@ -55,11 +55,86 @@ Multi-agent system for laboratory automation and research using OpenAI GPT-4, Go
 
 #### **Project 1.1: MCP Server for Glovebox Nikon Microscope**
 
-**M0 — Discovery & Control Audit (1-2 days)**
-- [ ] Inventory control paths: vendor SDK (NIS-Elements/Nikon SDK), camera API, stages, illumination, filter wheels
-- [ ] Decide transport to hardware (USB/serial/ethernet) and OS host
-- [ ] **Deliverable**: Device map + command table document
-- [ ] **Accept**: Can manually move stage, snap image from script
+**M0 — Discovery & Control Audit (1-2 days)** 🚧 **IN PROGRESS**
+
+**Overview**: Establish foundation for microscope automation by understanding available hardware and control interfaces.
+
+**Phase 1: Lab Environment Setup** (User Responsibility)
+- [ ] Deploy development environment on lab computer
+- [ ] Install Nikon SDK/NIS-Elements (if available)
+- [ ] Test basic camera connectivity and manual control
+- [ ] Document lab computer specifications and OS
+
+**Phase 2: Hardware Discovery & Inventory**
+- [ ] **Camera Control**: Inventory Nikon camera capabilities
+  - Model, resolution, exposure controls
+  - Connection type (USB/PCIe/Ethernet)
+  - Available APIs (NIS-Elements SDK, direct camera API)
+- [ ] **Stage Systems**: Map motorized components
+  - X, Y, Z stage controllers
+  - Movement ranges, precision, speed limits
+  - Control interfaces (serial, USB, proprietary)
+- [ ] **Illumination & Optics**: Document optical path
+  - Light sources and intensity controls
+  - Filter wheels, objectives, apertures
+  - Automated vs manual components
+- [ ] **Safety & Interlocks**: Identify safety systems
+  - Glovebox door sensors
+  - Emergency stops
+  - Z-axis collision protection
+  - Environmental sensors (pressure, humidity)
+
+**Phase 3: Control Interface Mapping**
+- [ ] **Transport Layer**: Determine hardware communication
+  - USB/Serial port assignments
+  - Network interfaces (if applicable)
+  - Required drivers and permissions
+- [ ] **Software Stack**: Map available control software
+  - NIS-Elements integration capabilities
+  - Vendor SDKs and APIs
+  - Python/direct programming interfaces
+- [ ] **Command Discovery**: Document control commands
+  - Camera: snap, exposure, gain settings
+  - Stage: move, home, position queries
+  - Illumination: on/off, intensity control
+
+**Phase 4: Proof of Concept Testing**
+- [ ] **Basic Camera Script**: Write minimal camera control
+  - Connect to camera
+  - Set exposure/gain parameters
+  - Capture and save image
+- [ ] **Stage Movement Test**: Create stage control script
+  - Initialize stage controllers
+  - Execute absolute/relative movements
+  - Query current position
+- [ ] **Integration Test**: Combined operation sequence
+  - Home stages → Move to position → Snap image
+  - Verify repeatability and accuracy
+
+**Deliverables**:
+1. **Hardware Inventory Document** (`docs/hardware_inventory.md`)
+   - Complete device list with specs
+   - Connection diagrams
+   - Control interface summary
+2. **Command Reference** (`docs/command_reference.md`) 
+   - Available APIs and methods
+   - Parameter ranges and constraints
+   - Error codes and handling
+3. **Test Scripts** (`scripts/proof_of_concept/`)
+   - Camera control script
+   - Stage movement script
+   - Combined operation script
+4. **Technical Specification** (`docs/M0_technical_spec.md`)
+   - System architecture overview
+   - Recommended MCP server design
+   - Safety considerations
+
+**Acceptance Criteria**:
+- ✅ Can manually move stage to specific coordinates from script
+- ✅ Can capture images with programmatic exposure control  
+- ✅ All hardware components identified and documented
+- ✅ Test scripts run successfully 3/3 times
+- ✅ Technical specification approved for M1 implementation
 
 **M1 — MCP Skeleton & Tool Contracts (2-3 days)**
 - [ ] Stand up MCP server (Node/TS or Python) with health check + list_tools
