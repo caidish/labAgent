@@ -1,8 +1,10 @@
 import logging
 import os
+import json
 from typing import List, Dict
 from openai import OpenAI
 from ..utils import Config
+from .gpt5_mini_client import GPT5MiniClient
 
 
 class PaperScorer:
@@ -16,6 +18,31 @@ class PaperScorer:
         self.client = OpenAI(api_key=self.config.openai_api_key)
         self.prompt_template = self._load_prompt_template()
         
+        # Load model configuration
+        self.model_config = self._load_model_config()
+        
+        # Initialize GPT-5-mini client if needed
+        if self.model_config.get('name') == 'gpt-5-mini':
+            self.gpt5_mini_client = GPT5MiniClient()
+        else:
+            self.gpt5_mini_client = None
+        
+    def _load_model_config(self) -> Dict:
+        """Load model configuration from models.json"""
+        config_path = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)), 
+            'config', 
+            'models.json'
+        )
+        
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                models_config = json.load(f)
+                return models_config.get('arxivFilterModel', {})
+        except FileNotFoundError:
+            self.logger.warning(f"Models config not found at {config_path}, using GPT-4o")
+            return {"name": "gpt-4o", "provider": "openai"}
+    
     def _load_prompt_template(self) -> str:
         prompt_path = os.path.join(
             os.path.dirname(os.path.dirname(__file__)), 
@@ -80,25 +107,48 @@ Subjects: {paper.get('subjects', 'N/A')}
         prompt = self.prompt_template.replace('{PAPER_INFO}', paper_info)
         
         try:
-            print(f"[DEBUG] Making OpenAI API call...")
-            response = self.client.chat.completions.create(
-                model="gpt-4o",  # Using GPT-4o as GPT-5 may not be available yet
-                messages=[
+            if self.gpt5_mini_client:
+                # Use GPT-5-mini responses API
+                print(f"[DEBUG] Making GPT-5-mini API call...")
+                messages = [
                     {"role": "system", "content": "You are an expert research paper evaluator for a 2D materials physics laboratory."},
                     {"role": "user", "content": prompt}
-                ],
-                max_tokens=300,
-                temperature=0.1
-            )
-            
-            print(f"[DEBUG] OpenAI API call successful")
-            response_text = response.choices[0].message.content
-            print(f"[DEBUG] Response: {response_text[:100]}...")
-            return self._parse_response(response_text)
+                ]
+                
+                result = self.gpt5_mini_client.create_response(
+                    messages=messages, 
+                    use_case=self.model_config.get('purpose', 'paper_scoring')
+                )
+                
+                if result['success']:
+                    print(f"[DEBUG] GPT-5-mini API call successful")
+                    response_text = result['content']
+                    print(f"[DEBUG] Response: {response_text[:100]}...")
+                    return self._parse_response(response_text)
+                else:
+                    raise Exception(result.get('error', 'Unknown GPT-5-mini API error'))
+            else:
+                # Use traditional chat completions API for GPT-4o
+                print(f"[DEBUG] Making OpenAI chat completions API call...")
+                model_name = self.model_config.get('name', 'gpt-4o')
+                response = self.client.chat.completions.create(
+                    model=model_name,
+                    messages=[
+                        {"role": "system", "content": "You are an expert research paper evaluator for a 2D materials physics laboratory."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    max_tokens=300,
+                    temperature=0.1
+                )
+                
+                print(f"[DEBUG] OpenAI API call successful")
+                response_text = response.choices[0].message.content
+                print(f"[DEBUG] Response: {response_text[:100]}...")
+                return self._parse_response(response_text)
             
         except Exception as e:
-            self.logger.error(f"OpenAI API error: {e}")
-            print(f"[DEBUG] OpenAI API error: {e}")
+            self.logger.error(f"API error: {e}")
+            print(f"[DEBUG] API error: {e}")
             raise
     
     def _parse_response(self, response_text: str) -> Dict[str, any]:

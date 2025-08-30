@@ -1,0 +1,106 @@
+{
+  "model": "gpt-5-mini",
+  "api_endpoint": "responses",
+  "default_config": {
+    "input": [],
+    "text": {
+      "format": {
+        "type": "text"
+      },
+      "verbosity": "medium"
+    },
+    "reasoning": {
+      "effort": "medium",
+      "summary": "auto"
+    },
+    "tools": [],
+    "store": true,
+    "include": [
+      "reasoning.encrypted_content"
+    ]
+  },
+  "use_cases": {
+    "paper_scoring": {
+      "text": {
+        "format": {
+          "type": "text"
+        },
+        "verbosity": "low"
+      },
+      "reasoning": {
+        "effort": "low",
+        "summary": "auto"
+      },
+      "include": [
+        "reasoning.encrypted_content"
+      ],
+      "description": "Optimized for fast paper relevance scoring"
+    },
+    "chat_conversation": {
+      "text": {
+        "format": {
+          "type": "text"
+        },
+        "verbosity": "high"
+      },
+      "reasoning": {
+        "effort": "high",
+        "summary": "auto"
+      },
+      "include": [
+        "reasoning.encrypted_content",
+        "web_search_call.action.sources"
+      ],
+      "description": "Enhanced reasoning for research discussions"
+    },
+    "research_analysis": {
+      "text": {
+        "format": {
+          "type": "text"
+        },
+        "verbosity": "high"
+      },
+      "reasoning": {
+        "effort": "high",
+        "summary": "auto"
+      },
+      "tools": [],
+      "include": [
+        "reasoning.encrypted_content",
+        "web_search_call.action.sources"
+      ],
+      "description": "Deep analysis of research papers and trends"
+    }
+  },
+  "reasoning_levels": {
+    "low": {
+      "effort": "low",
+      "summary": "auto",
+      "description": "Fast responses for simple tasks"
+    },
+    "medium": {
+      "effort": "medium", 
+      "summary": "auto",
+      "description": "Balanced reasoning for general tasks"
+    },
+    "high": {
+      "effort": "high",
+      "summary": "detailed",
+      "description": "Deep reasoning for complex analysis"
+    }
+  },
+  "verbosity_levels": {
+    "low": {
+      "description": "Concise responses",
+      "recommended_for": ["scoring", "classification"]
+    },
+    "medium": {
+      "description": "Balanced detail level",
+      "recommended_for": ["explanations", "summaries"]
+    },
+    "high": {
+      "description": "Detailed explanations",
+      "recommended_for": ["research", "analysis", "chat"]
+    }
+  }
+}

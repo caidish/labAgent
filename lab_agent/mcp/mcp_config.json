@@ -1,0 +1,63 @@
+{
+  "server": {
+    "name": "labagent-mcp-server",
+    "version": "1.0.0",
+    "description": "MCP server for Lab Agent ArXiv Daily tools",
+    "transport": "stdio",
+    "logging": {
+      "level": "INFO",
+      "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    }
+  },
+  "tools": [
+    {
+      "name": "read_daily_report",
+      "enabled": true,
+      "description": "Read and analyze an existing ArXiv Daily report",
+      "parameters": {
+        "date": {
+          "type": "string",
+          "description": "Date of report to read (YYYY-MM-DD, 'today', 'yesterday')",
+          "default": "today"
+        }
+      }
+    },
+    {
+      "name": "generate_daily_report",
+      "enabled": true,
+      "description": "Generate a new ArXiv Daily report",
+      "parameters": {
+        "date": {
+          "type": "string",
+          "description": "Date for report generation (YYYY-MM-DD, 'today')",
+          "default": "today"
+        },
+        "force": {
+          "type": "boolean",
+          "description": "Force regeneration even if report exists",
+          "default": false
+        }
+      }
+    },
+    {
+      "name": "list_available_reports",
+      "enabled": true,
+      "description": "List available ArXiv Daily reports",
+      "parameters": {
+        "limit": {
+          "type": "integer",
+          "description": "Maximum number of reports to return",
+          "default": 10,
+          "minimum": 1,
+          "maximum": 50
+        }
+      }
+    }
+  ],
+  "integration": {
+    "arxiv_daily": {
+      "reports_directory": "./reports",
+      "max_report_age_days": 30
+    }
+  }
+}

@@ -1,0 +1,89 @@
+{
+  "model": "gpt-5-mini",
+  "api_endpoint": "responses",
+  "purpose": "general_assistant",
+  "description": "GPT-5-mini chatbox for general assistance and future MCP tool integration",
+  "config": {
+    "text": {
+      "format": {
+        "type": "text"
+      },
+      "verbosity": "high"
+    },
+    "reasoning": {
+      "effort": "medium",
+      "summary": "auto"
+    },
+    "tools": [],
+    "store": true,
+    "include": [
+      "reasoning.encrypted_content"
+    ]
+  },
+  "system_prompt": "You are a helpful AI assistant integrated into a condensed matter physics laboratory management system. You have access to ArXiv Daily report tools and MUST use them when appropriate.\n\n**IMPORTANT: When users ask about ArXiv papers, reports, or want to generate reports, you MUST call the appropriate tools:**\n- Use `generate_daily_report` when users ask to generate/create daily reports\n- Use `read_daily_report` when users ask to read/analyze existing reports (gives summary only)\n- Use `search_papers_by_author` when users ask about specific authors (searches ALL papers in full report)\n- Use `list_available_reports` when users ask what reports are available\n\n**Always call the tools first, then provide analysis based on the results.**\n\nYou can also help with:\n- General research questions and explanations\n- Analysis of scientific data and papers\n- Laboratory workflow suggestions\n\nProvide clear, accurate, and helpful responses. When discussing scientific topics, be precise and cite relevant concepts.",
+  "conversation_settings": {
+    "max_exchanges": 50,
+    "context_window": 10,
+    "enable_reasoning_display": true,
+    "show_token_usage": false
+  },
+  "ui_settings": {
+    "title": "GPT-5-mini Assistant",
+    "subtitle": "AI Assistant for Lab Management",
+    "placeholder_text": "Ask me anything about research, papers, or lab management...",
+    "suggested_prompts": [
+      "Explain a concept in condensed matter physics",
+      "Help me analyze research trends",
+      "Suggest lab workflow improvements",
+      "What MCP tools would be useful for research?"
+    ]
+  },
+  "mcp_integration": {
+    "enabled": true,
+    "server_startup": true,
+    "arxiv_daily_tools": [
+      {
+        "name": "read_daily_report",
+        "description": "Read and analyze existing ArXiv Daily reports",
+        "status": "active"
+      },
+      {
+        "name": "generate_daily_report", 
+        "description": "Generate new ArXiv Daily reports",
+        "status": "active"
+      },
+      {
+        "name": "list_available_reports",
+        "description": "List available ArXiv Daily reports with metadata", 
+        "status": "active"
+      },
+      {
+        "name": "search_papers_by_author",
+        "description": "Search ALL papers in ArXiv Daily reports by author name - searches the complete report (all 144 papers), not just summaries",
+        "status": "active"
+      }
+    ],
+    "planned_tools": [
+      {
+        "name": "literature_search",
+        "description": "Search scientific literature and databases",
+        "status": "planned"
+      },
+      {
+        "name": "data_analysis",
+        "description": "Analyze experimental data and generate plots",
+        "status": "planned"
+      },
+      {
+        "name": "calculation_tools",
+        "description": "Perform scientific calculations and simulations",
+        "status": "planned"
+      },
+      {
+        "name": "lab_equipment_interface",
+        "description": "Interface with laboratory equipment and instruments",
+        "status": "planned"
+      }
+    ]
+  }
+}

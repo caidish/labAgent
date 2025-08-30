@@ -24,3 +24,6 @@ nest-asyncio>=1.5.8
 python-dotenv>=1.0.0
 pydantic>=2.0.0
 asyncio-mqtt>=0.13.0
+
+# MCP (Model Context Protocol)
+mcp>=1.13.0

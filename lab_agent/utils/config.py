@@ -12,11 +12,11 @@ class Config:
         
         # OpenAI Configuration
         self.openai_api_key = os.getenv("OPENAI_API_KEY")
-        self.openai_model = os.getenv("OPENAI_MODEL", "gpt-4")
+        self.openai_model = os.getenv("OPENAI_MODEL", "gpt-5-mini")
         
         # Google Gemini Configuration
         self.google_api_key = os.getenv("GOOGLE_API_KEY")
-        self.gemini_model = os.getenv("GEMINI_MODEL", "gemini-pro")
+        self.gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash-exp")
         
         # Application Settings
         self.debug = os.getenv("DEBUG", "false").lower() == "true"

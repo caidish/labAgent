@@ -1,19 +1,37 @@
 {
   "arxivFilterModel": {
-    "name": "gpt-4o",
+    "name": "gpt-5-mini",
     "provider": "openai",
+    "api_type": "responses",
     "description": "Model used for scoring and filtering arXiv papers",
-    "maxTokens": 300,
-    "temperature": 0.1,
-    "purpose": "paper_scoring"
+    "purpose": "paper_scoring",
+    "reasoning": {
+      "effort": "low",
+      "summary": "auto"
+    },
+    "text_format": {
+      "type": "text",
+      "verbosity": "low"
+    }
   },
   "chatModel": {
-    "name": "gpt-4o",
-    "provider": "openai", 
+    "name": "gpt-5-mini",
+    "provider": "openai",
+    "api_type": "responses",
     "description": "Model used for chatting about arXiv papers",
-    "maxTokens": 1500,
-    "temperature": 0.3,
-    "purpose": "chat_conversation"
+    "purpose": "chat_conversation",
+    "reasoning": {
+      "effort": "high",
+      "summary": "detailed"
+    },
+    "text_format": {
+      "type": "text",
+      "verbosity": "high"
+    },
+    "include": [
+      "reasoning.encrypted_content",
+      "web_search_call.action.sources"
+    ]
   },
   "fallbackModels": {
     "arxivFilter": [

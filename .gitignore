@@ -147,3 +147,4 @@ logs/
 # Database
 *.db
 *.sqlite
+/reports

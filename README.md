@@ -23,12 +23,13 @@ cp .env.example .env
 Edit `.env` file with your API keys:
 
 ```bash
-# Required for ArXiv Daily Updates
+# Required for ArXiv Daily Updates and MCP Tools
 OPENAI_API_KEY=your_openai_api_key_here
-OPENAI_MODEL=gpt-4o
+OPENAI_MODEL=gpt-5-mini
 
-# Optional
+# Optional  
 GOOGLE_API_KEY=your_google_api_key_here
+GEMINI_MODEL=gemini-2.0-flash-exp
 DEBUG=false
 LOG_LEVEL=INFO
 ```

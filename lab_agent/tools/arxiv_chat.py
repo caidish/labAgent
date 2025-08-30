@@ -4,6 +4,7 @@ import os
 from typing import List, Dict, Optional
 from openai import OpenAI
 from ..utils import Config
+from .gpt5_mini_client import GPT5MiniClient
 
 
 class ArxivChat:
@@ -19,6 +20,12 @@ class ArxivChat:
         self.model_config = self._load_model_config()
         self.conversation_history = []
         self.current_papers = []
+        
+        # Initialize GPT-5-mini client if needed
+        if self.model_config.get('name') == 'gpt-5-mini':
+            self.gpt5_mini_client = GPT5MiniClient()
+        else:
+            self.gpt5_mini_client = None
         
     def _load_system_prompt(self) -> str:
         prompt_path = os.path.join(
@@ -136,15 +143,28 @@ class ArxivChat:
                 "content": user_message
             })
             
-            # Call OpenAI API
-            response = self.client.chat.completions.create(
-                model=self.model_config.get('name', 'gpt-4o'),
-                messages=self.conversation_history,
-                max_tokens=self.model_config.get('maxTokens', 1500),
-                temperature=self.model_config.get('temperature', 0.3)
-            )
-            
-            assistant_message = response.choices[0].message.content
+            # Call appropriate API based on model
+            if self.gpt5_mini_client:
+                # Use GPT-5-mini responses API
+                result = self.gpt5_mini_client.create_response(
+                    messages=self.conversation_history,
+                    use_case=self.model_config.get('purpose', 'chat_conversation')
+                )
+                
+                if not result['success']:
+                    raise Exception(result.get('error', 'Unknown GPT-5-mini API error'))
+                
+                assistant_message = result['content']
+            else:
+                # Use traditional chat completions API for GPT-4o
+                response = self.client.chat.completions.create(
+                    model=self.model_config.get('name', 'gpt-4o'),
+                    messages=self.conversation_history,
+                    max_tokens=self.model_config.get('maxTokens', 1500),
+                    temperature=self.model_config.get('temperature', 0.3)
+                )
+                
+                assistant_message = response.choices[0].message.content
             
             # Add assistant response to history
             self.conversation_history.append({
