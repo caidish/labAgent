@@ -8,7 +8,7 @@ A multi-agent system for laboratory automation and research, specializing in aut
 
 ```bash
 # Clone the repository
-git clone https://github.com/caijiaqi/labAgent.git
+git clone https://github.com/caidish/labAgent.git
 cd labAgent
 
 # Install dependencies

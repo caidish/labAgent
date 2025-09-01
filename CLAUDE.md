@@ -381,3 +381,4 @@ LOG_LEVEL=INFO
 - Project status changes significantly
 - Milestones are reached
 - New projects/phases begin
+
