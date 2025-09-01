@@ -18,12 +18,216 @@ class LLMChatbox:
         self.mcp_client = None
         self.available_tools = []
         
+        # Initialize detailed conversation logging to file
+        self._setup_conversation_logging()
+        
         # Initialize MCP integration if enabled
         if self.config.get("mcp_integration", {}).get("enabled", False):
             self._initialize_mcp()
         
         # Initialize conversation with system prompt
         self._initialize_conversation()
+    
+    def _setup_conversation_logging(self):
+        """Setup detailed conversation logging to file"""
+        # Create logs directory if it doesn't exist
+        logs_dir = os.path.join(os.getcwd(), "logs")
+        os.makedirs(logs_dir, exist_ok=True)
+        
+        # Setup conversation logger that writes to file
+        self.conversation_logger = logging.getLogger("conversation_trace")
+        self.conversation_logger.setLevel(logging.DEBUG)
+        
+        # Remove existing handlers to avoid duplicates
+        for handler in self.conversation_logger.handlers[:]:
+            self.conversation_logger.removeHandler(handler)
+        
+        # File handler for detailed conversation logs
+        log_file = os.path.join(logs_dir, "conversation_trace.log")
+        file_handler = logging.FileHandler(log_file, mode='a', encoding='utf-8')
+        file_handler.setLevel(logging.DEBUG)
+        
+        # Detailed formatter
+        formatter = logging.Formatter(
+            '%(asctime)s | %(levelname)s | %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
+        file_handler.setFormatter(formatter)
+        self.conversation_logger.addHandler(file_handler)
+        
+        # Prevent propagation to root logger to avoid console output
+        self.conversation_logger.propagate = False
+        
+        self.conversation_logger.info("=" * 80)
+        self.conversation_logger.info("NEW CHATBOX SESSION STARTED")
+        self.conversation_logger.info("=" * 80)
+    
+    def _log_conversation_state(self, context: str):
+        """Log the current state of conversation history"""
+        self.conversation_logger.info(f"CONVERSATION STATE - {context}")
+        self.conversation_logger.info(f"Total messages: {len(self.conversation_history)}")
+        
+        for i, msg in enumerate(self.conversation_history):
+            role = msg.get('role', 'unknown')
+            content = msg.get('content', '')
+            content_preview = content[:100].replace('\n', ' ') + ('...' if len(content) > 100 else '')
+            
+            extra_info = ""
+            if 'tool_calls' in msg:
+                extra_info = f" [HAS TOOL_CALLS: {len(msg['tool_calls'])}]"
+            elif 'tool_call_id' in msg:
+                extra_info = f" [TOOL_RESULT for {msg['tool_call_id']}]"
+            
+            self.conversation_logger.info(f"  [{i}] {role.upper()}: {content_preview}{extra_info}")
+        
+        self.conversation_logger.info("-" * 50)
+    
+    async def _handle_iterative_tool_calling(self, initial_result: Dict, config: Dict, tool_call_results: List) -> str:
+        """Handle multiple rounds of tool calls until LLM provides final response"""
+        current_result = initial_result
+        api_call_count = 1
+        
+        # Get max iterations from config (default to 20)
+        max_iterations = self.config.get("conversation_settings", {}).get("max_tool_call_iterations", 20)
+        self.conversation_logger.info(f"MAX TOOL CALL ITERATIONS SET TO: {max_iterations}")
+        
+        while api_call_count <= max_iterations:
+            tool_calls = current_result.get('metadata', {}).get('tool_calls', [])
+            if not tool_calls:
+                # No more tool calls - this is the final response
+                final_content = current_result.get('content', '')
+                self.conversation_logger.info(f"FINAL RESPONSE AFTER {api_call_count} API CALLS - Length: {len(final_content)} chars")
+                
+                # Add final assistant response to conversation history
+                self.conversation_history.append({
+                    "role": "assistant",
+                    "content": final_content
+                })
+                return final_content
+            
+            self.logger.info(f"Executing {len(tool_calls)} tool calls (round {api_call_count})")
+            self.conversation_logger.info(f"API CALL #{api_call_count} TOOL CALLS: {len(tool_calls)} tools")
+            for i, tc in enumerate(tool_calls):
+                tool_name = tc.get('name') or tc.get('function', {}).get('name')
+                self.conversation_logger.info(f"  Tool {i+1}: {tool_name}")
+            
+            # STEP 1: Add assistant message with tool calls to conversation history
+            assistant_message = {
+                "role": "assistant",
+                "content": current_result.get('content', '')
+            }
+            
+            # Add tool calls to assistant message (for proper OpenAI format)
+            if tool_calls:
+                formatted_tool_calls = []
+                for tool_call in tool_calls:
+                    # Handle different formats from responses API vs chat completions
+                    if 'function' in tool_call:
+                        formatted_tool_calls.append(tool_call)
+                    else:
+                        formatted_tool_calls.append({
+                            "id": tool_call.get('id', f"call_{len(formatted_tool_calls)}"),
+                            "type": "function",
+                            "function": {
+                                "name": tool_call.get('name'),
+                                "arguments": json.dumps(tool_call.get('arguments', {}))
+                            }
+                        })
+                assistant_message["tool_calls"] = formatted_tool_calls
+            
+            self.conversation_history.append(assistant_message)
+            self.conversation_logger.info(f"ADDED ASSISTANT MESSAGE #{api_call_count} WITH TOOL CALLS")
+            
+            # STEP 2: Execute tools and add results as "tool" role messages
+            for i, tool_call in enumerate(tool_calls):
+                tool_name = tool_call.get('name') or tool_call.get('function', {}).get('name')
+                tool_args = tool_call.get('arguments', {}) or tool_call.get('function', {}).get('arguments', {})
+                tool_call_id = tool_call.get('id') or f"call_{i}"
+                
+                if tool_name:
+                    self.logger.info(f"Executing {tool_name}")
+                    self.conversation_logger.info(f"EXECUTING TOOL #{api_call_count}: {tool_name} with args: {tool_args}")
+                    tool_result = await self._execute_tool_call(tool_name, tool_args)
+                    self.conversation_logger.info(f"TOOL RESULT #{api_call_count}: Success={tool_result.get('success')}, Message={tool_result.get('message', 'No message')}")
+                    
+                    # Store results for UI display
+                    tool_call_results.append({
+                        'tool_name': tool_name,
+                        'arguments': tool_args,
+                        'result': tool_result
+                    })
+                    
+                    # Store detailed results for collapsible display in UI
+                    if not hasattr(self, '_tool_results'):
+                        self._tool_results = []
+                    
+                    if tool_result.get('success'):
+                        self._tool_results.append({
+                            'tool_name': tool_name,
+                            'summary': tool_result.get('message', 'Tool executed successfully'),
+                            'data': tool_result.get('data', {}),
+                            'success': True
+                        })
+                        tool_result_content = self._format_tool_result_for_gpt(tool_result)
+                    else:
+                        self._tool_results.append({
+                            'tool_name': tool_name,
+                            'summary': f"Tool failed: {tool_result.get('error', 'Unknown error')}",
+                            'data': {},
+                            'success': False
+                        })
+                        tool_result_content = f"Tool execution failed: {tool_result.get('error', 'Unknown error')}"
+                    
+                    # Add tool result to conversation history (OpenAI standard)
+                    self.conversation_history.append({
+                        "role": "tool",
+                        "content": tool_result_content,
+                        "tool_call_id": tool_call_id
+                    })
+            
+            # STEP 3: Add user message to prompt GPT to continue
+            self.conversation_history.append({
+                "role": "user",
+                "content": "Continue with the analysis. If you need to call more tools to complete the user's request, do so. If the analysis is complete, provide your final response."
+            })
+            self.conversation_logger.info(f"ADDED USER CONTINUE MESSAGE AFTER API CALL #{api_call_count}")
+            self._log_conversation_state(f"After tool execution round {api_call_count}")
+            
+            # STEP 4: Make next API call
+            api_call_count += 1
+            self.logger.info(f"Making API call #{api_call_count}")
+            self.conversation_logger.info(f"MAKING API CALL #{api_call_count}")
+            
+            current_result = self.client.create_response(
+                messages=self.conversation_history,
+                use_case=config.get("purpose", "general_assistant"),
+                custom_config=config
+            )
+            
+            # Log API call result
+            self.conversation_logger.info(f"API CALL #{api_call_count} RESULT:")
+            self.conversation_logger.info(f"  Success: {current_result.get('success')}")
+            self.conversation_logger.info(f"  Content length: {len(current_result.get('content', ''))}")
+            self.conversation_logger.info(f"  Has tool calls: {bool(current_result.get('metadata', {}).get('tool_calls'))}")
+            
+            if not current_result.get('success'):
+                # API call failed
+                error_msg = f"API call #{api_call_count} failed: {current_result.get('error', 'Unknown error')}"
+                self.conversation_logger.info(f"ERROR: {error_msg}")
+                self.conversation_history.append({
+                    "role": "assistant",
+                    "content": f"I executed tools successfully, but encountered an error in follow-up processing: {current_result.get('error', 'Unknown error')}"
+                })
+                return f"Tool execution completed, but processing error occurred: {current_result.get('error', 'Unknown error')}"
+        
+        # Max iterations reached
+        self.conversation_logger.info(f"MAX ITERATIONS ({max_iterations}) REACHED - Stopping tool calling loop")
+        final_content = f"Completed tool execution after {max_iterations} rounds, but the analysis workflow is still requesting more tools. Please check the tool results above."
+        self.conversation_history.append({
+            "role": "assistant",
+            "content": final_content
+        })
+        return final_content
     
     def _load_config(self) -> Dict:
         """Load chatbox configuration"""
@@ -201,6 +405,10 @@ Always provide helpful context and summaries when using these tools.
                 "content": user_message
             })
             
+            # Log user message
+            self.conversation_logger.info(f"USER MESSAGE: {user_message}")
+            self._log_conversation_state("After adding user message")
+            
             # Prepare custom config with tools if MCP is enabled
             custom_config = self.config.get("config", {}).copy()
             
@@ -220,6 +428,10 @@ Always provide helpful context and summaries when using these tools.
                 else:
                     self.logger.warning("⚠️  No MCP tools available to add to request")
             
+            # Log API call details
+            self.conversation_logger.info(f"MAKING API CALL #1 - Model: {custom_config.get('model', 'default')}")
+            self.conversation_logger.info(f"Tools available: {len(custom_config.get('tools', []))}")
+            
             # Create response using LLM client
             result = self.client.create_response(
                 messages=self.conversation_history,
@@ -227,105 +439,44 @@ Always provide helpful context and summaries when using these tools.
                 custom_config=custom_config
             )
             
+            # Log API response
+            self.conversation_logger.info(f"API CALL #1 RESPONSE - Success: {result['success']}")
             if result['success']:
-                # Check if GPT-5-mini made tool calls
+                self.conversation_logger.info(f"Content: {result['content'][:200]}...")
+                self.conversation_logger.info(f"Tool calls detected: {bool(result.get('metadata', {}).get('tool_calls'))}")
+            
+            if result['success']:
+                # Handle tool calls using proper OpenAI pattern
                 response_content = result['content']
                 tool_call_results = []
                 
                 # Look for tool calls in the response metadata
-                self.logger.info(f"🔍 DEBUG: Response metadata: {result.get('metadata', {})}")
-                if result.get('metadata') and result['metadata'].get('tool_calls'):
-                    self.logger.info(f"🔧 LLM made tool calls: {result['metadata']['tool_calls']}")
-                    
-                    # Execute each tool call and collect results for follow-up
-                    tool_results_for_followup = []
-                    
-                    for tool_call in result['metadata']['tool_calls']:
-                        # Try both formats: responses API and standard format
-                        tool_name = tool_call.get('name') or tool_call.get('function', {}).get('name')
-                        tool_args = tool_call.get('arguments', {}) or tool_call.get('function', {}).get('arguments', {})
-                        
-                        if tool_name:
-                            self.logger.info(f"🚀 Executing tool call: {tool_name}")
-                            tool_result = await self._execute_tool_call(tool_name, tool_args)
-                            tool_call_results.append({
-                                'tool_name': tool_name,
-                                'arguments': tool_args,
-                                'result': tool_result
-                            })
-                            
-                            if tool_result.get('success'):
-                                # Format tool result as collapsible section
-                                result_summary = tool_result.get('message', 'Tool executed successfully')
-                                result_data = tool_result.get('data', {})
-                                
-                                # Store detailed results for collapsible display
-                                if not hasattr(self, '_tool_results'):
-                                    self._tool_results = []
-                                
-                                self._tool_results.append({
-                                    'tool_name': tool_name,
-                                    'summary': result_summary,
-                                    'data': result_data,
-                                    'success': True
-                                })
-                                
-                                # Prepare tool result for follow-up call to GPT-5-mini
-                                tool_results_for_followup.append({
-                                    'tool_call_id': tool_call.get('id', ''),
-                                    'name': tool_name,
-                                    'content': self._format_tool_result_for_gpt(tool_result)
-                                })
-                    
-                    # If we have tool results, make a follow-up call to GPT-5-mini with the results
-                    if tool_results_for_followup:
-                        self.logger.info(f"📤 Sending tool results back to GPT-5-mini for analysis")
-                        
-                        # Add tool results as user messages for GPT-5-mini (doesn't support tool role)
-                        tool_results_content = []
-                        for tool_result in tool_results_for_followup:
-                            tool_results_content.append(f"**{tool_result['name']} Result:**\n{tool_result['content']}")
-                        
-                        # Combine all tool results into a single user message
-                        combined_tool_results = "\n\n".join(tool_results_content)
-                        self.conversation_history.append({
-                            "role": "user",
-                            "content": f"Here are the results from the tools you called. Please analyze them and answer the original question:\n\n{combined_tool_results}"
-                        })
-                        
-                        # Make follow-up call to get GPT-5-mini's analysis of the tool results
-                        followup_config = self.config.get("config", {}).copy()
-                        # Don't include tools in follow-up call to avoid infinite loops
-                        followup_config.pop("tools", None)
-                        
-                        followup_result = self.client.create_response(
-                            messages=self.conversation_history,
-                            use_case=self.config.get("purpose", "general_assistant"),
-                            custom_config=followup_config
-                        )
-                        
-                        if followup_result['success']:
-                            # Replace the initial response with the analyzed response
-                            response_content = followup_result['content']
-                        else:
-                            # If follow-up fails, show brief summary
-                            response_content += f"\n\n✅ Executed {len(tool_results_for_followup)} tools successfully (analysis unavailable)"
-                else:
-                    # No tool calls detected
-                    self.logger.warning(f"⚠️  NO TOOL CALLS DETECTED - LLM may be responding without tool use!")
+                self.logger.info(f"Response received, tool calls: {bool(result.get('metadata', {}).get('tool_calls'))}")
                 
-                # Add the final assistant response to history (either original or analyzed)
-                self.conversation_history.append({
-                    "role": "assistant",
-                    "content": response_content
-                })
+                if result.get('metadata') and result['metadata'].get('tool_calls'):
+                    # Handle iterative tool calling until no more tool calls are made
+                    response_content = await self._handle_iterative_tool_calling(
+                        result, custom_config, tool_call_results
+                    )
+                else:
+                    # No tool calls - direct response from LLM
+                    self.logger.info(f"ℹ️ Direct response from LLM (no tool calls)")
+                    self.conversation_history.append({
+                        "role": "assistant",
+                        "content": response_content
+                    })
                 
                 # Keep conversation history manageable
                 self._trim_conversation_history()
+                self._log_conversation_state("Final conversation state")
                 
                 # Get tool results and reset for next conversation
                 current_tool_results = getattr(self, '_tool_results', [])
                 self._tool_results = []  # Reset for next conversation
+                
+                # Log successful completion
+                self.conversation_logger.info(f"CHAT COMPLETED SUCCESSFULLY - Response length: {len(response_content)} chars")
+                self.conversation_logger.info("=" * 50)
                 
                 return {
                     "success": True,

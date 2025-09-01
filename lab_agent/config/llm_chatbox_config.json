@@ -19,7 +19,8 @@
     "context_window": 50,
     "enable_reasoning_display": true,
     "show_token_usage": true,
-    "auto_collapse_threshold": 800
+    "auto_collapse_threshold": 800,
+    "max_tool_call_iterations": 20
   },
   "ui_settings": {
     "title": "AI Assistant",
