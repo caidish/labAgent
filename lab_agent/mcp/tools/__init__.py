@@ -7,5 +7,6 @@ lab agent functionalities.
 
 from .base_tool import BaseTool
 from .arxiv_daily_tools import ArxivDailyTools
+from .fastmcp_flake_client import FastMCPFlakeClient
 
-__all__ = ["BaseTool", "ArxivDailyTools"]
+__all__ = ["BaseTool", "ArxivDailyTools", "FastMCPFlakeClient"]

@@ -348,33 +348,35 @@ Always provide helpful context and summaries when using these tools.
         model = self.config.get("model", "gpt-4.1")
         
         for tool in available_tools:
-            if model.startswith("gpt-5"):
-                # Responses API format (simpler format)
-                llm_tool = {
-                    "type": "function",
-                    "name": tool["name"],
-                    "description": tool["description"],
-                    "parameters": tool.get("inputSchema", {
-                        "type": "object",
-                        "properties": {},
-                        "required": []
-                    })
-                }
-            else:
-                # Chat completions API format (nested function format) - for GPT-4.1
-                llm_tool = {
-                    "type": "function",
-                    "function": {
-                        "name": tool["name"],
-                        "description": tool["description"],
-                        "parameters": tool.get("inputSchema", {
-                            "type": "object",
-                            "properties": {},
-                            "required": []
-                        })
+            # Handle both regular MCP tools and FastMCP tools
+            if isinstance(tool, dict) and "name" in tool:
+                tool_name = tool["name"]
+                tool_desc = tool.get("description", "")
+                tool_params = tool.get("inputSchema", tool.get("parameters", {
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                }))
+                
+                if model.startswith("gpt-5"):
+                    # Responses API format (simpler format)
+                    llm_tool = {
+                        "type": "function",
+                        "name": tool_name,
+                        "description": tool_desc,
+                        "parameters": tool_params
                     }
-                }
-            llm_tools.append(llm_tool)
+                else:
+                    # Chat completions API format (nested function format) - for GPT-4.1
+                    llm_tool = {
+                        "type": "function",
+                        "function": {
+                            "name": tool_name,
+                            "description": tool_desc,
+                            "parameters": tool_params
+                        }
+                    }
+                llm_tools.append(llm_tool)
         
         return llm_tools
     

@@ -1,5 +1,5 @@
 {
-  "last_updated": "2025-09-01T16:42:50.485744",
+  "last_updated": "2025-09-02T17:29:27.691604",
   "tools": {
     "arxiv_daily": {
       "active": true,
@@ -13,7 +13,7 @@
       "description": "AI-powered quality assessment via external MCP server",
       "category": "analysis",
       "server_url": "http://0.0.0.0:8000",
-      "connection_status": "connected"
+      "connection_status": "failed"
     }
   }
 }

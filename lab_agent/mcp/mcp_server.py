@@ -14,7 +14,7 @@ from mcp.types import TextContent
 from mcp import Tool
 
 from .tools.arxiv_daily_tools import ArxivDailyTools
-from .tools.flake_2d_client import Flake2DClient
+from .tools.fastmcp_flake_client import FastMCPFlakeClient
 from ..utils.tool_manager import ToolManager
 
 
@@ -90,7 +90,7 @@ class MCPServer:
             
             # Initialize 2D Flake client tools if active
             if self.tool_manager.is_tool_active("flake_2d"):
-                flake_2d_client = Flake2DClient()
+                flake_2d_client = FastMCPFlakeClient()
                 self.tools["flake_2d_client"] = flake_2d_client
                 self.logger.info("Initialized 2D Flake client tools")
             

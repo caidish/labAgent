@@ -6,7 +6,7 @@ import asyncio
 import logging
 from typing import Dict, Any, Optional, List
 from .tools.arxiv_daily_tools import ArxivDailyTools
-from .tools.flake_2d_client import Flake2DClient
+from .tools.fastmcp_flake_client import FastMCPFlakeClient
 from ..utils.tool_manager import ToolManager
 
 
@@ -32,9 +32,22 @@ class MCPClient:
             
             # Initialize 2D Flake client tools if active
             if self.tool_manager.is_tool_active("flake_2d"):
-                self.tool_groups["flake_2d_client"] = Flake2DClient()
+                flake_client = FastMCPFlakeClient()
+                # Pre-connect to ensure tools are available
+                try:
+                    import asyncio
+                    try:
+                        loop = asyncio.get_running_loop()
+                        # Already in event loop, skip pre-connection
+                    except RuntimeError:
+                        # No event loop running, safe to connect
+                        asyncio.run(flake_client.connect())
+                except Exception as e:
+                    self.logger.warning(f"Could not pre-connect to FastMCP server: {e}")
+                
+                self.tool_groups["flake_2d"] = flake_client
                 initialized_count += 1
-                self.logger.info("MCP client: Initialized 2D Flake client tools")
+                self.logger.info("MCP client: Initialized FastMCP 2D Flake client")
             
             self.logger.info(f"MCP client initialized with {initialized_count} active tool groups")
         except Exception as e:
@@ -50,12 +63,26 @@ class MCPClient:
             try:
                 # Get tool definitions from the group
                 tool_defs = tool_group.get_tool_definitions()
-                tool_names = [tool.name for tool in tool_defs]
+                
+                # Handle both object-based and dict-based tool definitions
+                tool_names = []
+                for tool_def in tool_defs:
+                    if isinstance(tool_def, dict):
+                        tool_names.append(tool_def.get("name", "unknown"))
+                    else:
+                        tool_names.append(getattr(tool_def, 'name', 'unknown'))
                 
                 if tool_name in tool_names:
                     self.logger.info(f"🎯 MCP CLIENT: Found tool '{tool_name}' in group '{group_name}', executing...")
-                    # Execute the tool in the appropriate group
-                    result = await tool_group.execute_tool(tool_name, arguments)
+                    
+                    # Check if this is a FastMCP client and use sync execution
+                    if hasattr(tool_group, 'execute_tool_sync'):
+                        # FastMCP client - use sync execution to avoid event loop conflicts
+                        result = tool_group.execute_tool_sync(tool_name, arguments)
+                    else:
+                        # Regular MCP tool - use async execution
+                        result = await tool_group.execute_tool(tool_name, arguments)
+                    
                     self.logger.info(f"✅ MCP CLIENT: Tool '{tool_name}' executed successfully with result: {result.get('success', False)}")
                     return result
             except Exception as e:
@@ -77,12 +104,23 @@ class MCPClient:
             try:
                 tool_defs = tool_group.get_tool_definitions()
                 for tool_def in tool_defs:
-                    tools.append({
-                        "name": tool_def.name,
-                        "description": tool_def.description,
-                        "group": group_name,
-                        "inputSchema": tool_def.inputSchema
-                    })
+                    # Handle both object-based (ArxivDailyTools) and dict-based (FastMCP) tool definitions
+                    if isinstance(tool_def, dict):
+                        # Dictionary format (FastMCP)
+                        tools.append({
+                            "name": tool_def.get("name", "unknown"),
+                            "description": tool_def.get("description", ""),
+                            "group": group_name,
+                            "inputSchema": tool_def.get("inputSchema", {})
+                        })
+                    else:
+                        # Object format (ArxivDailyTools)
+                        tools.append({
+                            "name": getattr(tool_def, 'name', 'unknown'),
+                            "description": getattr(tool_def, 'description', ''),
+                            "group": group_name,
+                            "inputSchema": getattr(tool_def, 'inputSchema', {})
+                        })
             except Exception as e:
                 self.logger.error(f"Error getting tools from group {group_name}: {e}")
         
