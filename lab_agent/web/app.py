@@ -4,6 +4,7 @@ import nest_asyncio
 from dotenv import load_dotenv
 from datetime import datetime
 import json
+import hashlib
 from typing import List, Dict
 
 import sys
@@ -20,6 +21,67 @@ from lab_agent.tools.llm_chatbox import LLMChatbox
 nest_asyncio.apply()
 
 
+def load_auth_config():
+    """Load authentication configuration"""
+    try:
+        config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config', 'auth_config.json')
+        with open(config_path, 'r') as f:
+            return json.load(f)
+    except Exception as e:
+        st.error(f"Failed to load authentication config: {e}")
+        return None
+
+
+def check_password():
+    """Returns True if password is correct"""
+    
+    # Load authentication config
+    auth_config = load_auth_config()
+    if not auth_config:
+        st.error("Authentication configuration not available")
+        return False
+    
+    auth_settings = auth_config.get("authentication", {})
+    ui_settings = auth_config.get("ui", {})
+    security_settings = auth_config.get("security", {})
+    
+    # Check if authentication is enabled
+    if not auth_settings.get("enabled", True):
+        return True  # Skip authentication if disabled
+    
+    CORRECT_PASSWORD_HASH = auth_settings.get("password_hash")
+    if not CORRECT_PASSWORD_HASH:
+        st.error("Password hash not configured")
+        return False
+    
+    def password_entered():
+        # Hash the entered password and compare
+        entered_hash = hashlib.sha256(
+            st.session_state["password"].encode()
+        ).hexdigest()
+        
+        if entered_hash == CORRECT_PASSWORD_HASH:
+            st.session_state["authenticated"] = True
+            if security_settings.get("clear_password_on_auth", True):
+                del st.session_state["password"]  # Don't store password
+        else:
+            st.session_state["authenticated"] = False
+    
+    # Return True if already authenticated
+    if st.session_state.get("authenticated", False):
+        return True
+    
+    # Show login form
+    st.title(ui_settings.get("login_title", "🔒 Lab Agent System - Login"))
+    st.markdown(ui_settings.get("login_subtitle", "Enter the password to access the Lab Agent System"))
+    st.text_input("Password", type="password", on_change=password_entered, key="password")
+    
+    if st.session_state.get("authenticated") == False:
+        st.error(ui_settings.get("error_message", "❌ Incorrect password"))
+    
+    return False
+
+
 def main():
     load_dotenv()
     config = Config()
@@ -29,6 +91,21 @@ def main():
         page_icon="🧪",
         layout="wide"
     )
+    
+    # Authentication check
+    if not check_password():
+        st.stop()  # Stop execution if not authenticated
+    
+    # Add logout button in sidebar
+    auth_config = load_auth_config()
+    ui_settings = auth_config.get("ui", {}) if auth_config else {}
+    
+    with st.sidebar:
+        st.markdown("### Session")
+        logout_text = ui_settings.get("logout_button_text", "🚪 Logout")
+        if st.button(logout_text, use_container_width=True):
+            st.session_state["authenticated"] = False
+            st.rerun()
     
     st.title("🧪 Lab Agent System")
     st.markdown("Multi-agent system for laboratory automation and research")

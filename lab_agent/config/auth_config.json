@@ -1,0 +1,26 @@
+{
+  "authentication": {
+    "enabled": true,
+    "method": "password_hash",
+    "password_hash": "a6f815099914723b933800d1c5ab23b3ae4f024c723039293ccafb3f2fbacb8d",
+    "hash_algorithm": "sha256",
+    "session_timeout_hours": 24,
+    "description": "Simple password authentication for Lab Agent System"
+  },
+  "security": {
+    "clear_password_on_auth": true,
+    "require_logout": false,
+    "enforce_https": false
+  },
+  "ui": {
+    "login_title": "🔒 Lab Agent System - Login",
+    "login_subtitle": "Enter the password to access the Lab Agent System",
+    "error_message": "❌ Incorrect password",
+    "logout_button_text": "🚪 Logout"
+  },
+  "metadata": {
+    "created": "2025-09-03",
+    "version": "1.0.0",
+    "note": "Hash corresponds to password 'graphene'"
+  }
+}
