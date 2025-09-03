@@ -2,6 +2,8 @@ import json
 import logging
 import os
 import asyncio
+import base64
+from pathlib import Path
 from typing import List, Dict, Optional, Any
 from .llm_client import LLMClient
 from ..utils.tool_manager import ToolManager
@@ -81,6 +83,46 @@ class LLMChatbox:
             self.conversation_logger.info(f"  [{i}] {role.upper()}: {content_preview}{extra_info}")
         
         self.conversation_logger.info("-" * 50)
+    
+    def _read_image_to_base64(self, file_path: str) -> Optional[str]:
+        """Read an image file and convert it to base64 string"""
+        try:
+            # Handle different possible locations
+            possible_paths = [
+                file_path,  # Direct path
+                os.path.join(os.getcwd(), file_path),  # Relative to current directory
+                os.path.join(os.getcwd(), "uploads", file_path),  # In uploads directory
+                os.path.join(os.getcwd(), "uploads", "flake_images", file_path),  # In flake_images subdirectory
+            ]
+            
+            actual_path = None
+            for path in possible_paths:
+                if os.path.exists(path):
+                    actual_path = path
+                    break
+            
+            if actual_path is None:
+                self.logger.error(f"Image file not found: {file_path} (checked {len(possible_paths)} locations)")
+                return None
+            
+            # Check if it's a valid image file
+            valid_extensions = {'.jpg', '.jpeg', '.png', '.tiff', '.bmp', '.gif'}
+            file_ext = Path(actual_path).suffix.lower()
+            if file_ext not in valid_extensions:
+                self.logger.error(f"Invalid image file extension: {file_ext}")
+                return None
+            
+            # Read file and convert to base64
+            with open(actual_path, 'rb') as f:
+                image_bytes = f.read()
+                base64_string = base64.b64encode(image_bytes).decode('utf-8')
+                
+            self.logger.info(f"Successfully converted {actual_path} to base64 ({len(base64_string)} chars)")
+            return base64_string
+            
+        except Exception as e:
+            self.logger.error(f"Error reading image file {file_path}: {e}")
+            return None
     
     async def _handle_iterative_tool_calling(self, initial_result: Dict, config: Dict, tool_call_results: List) -> str:
         """Handle multiple rounds of tool calls until LLM provides final response"""
@@ -389,6 +431,36 @@ Always provide helpful context and summaries when using these tools.
             }
         
         try:
+            # Special handling for upload_image tool - convert file references to base64
+            if tool_name == "upload_image" and "image_data" in arguments:
+                image_data = arguments["image_data"]
+                
+                # Check if image_data looks like a file reference (not base64)
+                if isinstance(image_data, str) and len(image_data) < 1000 and not image_data.startswith('data:'):
+                    # Looks like a filename or placeholder, try to read the actual file
+                    if '<base64 of ' in image_data and image_data.endswith('>'):
+                        # Extract filename from placeholder like '<base64 of gr09.jpg>'
+                        filename = image_data.replace('<base64 of ', '').replace('>', '')
+                        self.logger.info(f"Converting placeholder '{image_data}' to actual base64 for file: {filename}")
+                    else:
+                        # Assume it's a direct filename
+                        filename = image_data
+                        self.logger.info(f"Converting filename '{filename}' to base64")
+                    
+                    # Try to read and convert the file
+                    base64_data = self._read_image_to_base64(filename)
+                    if base64_data:
+                        arguments["image_data"] = base64_data
+                        # Ensure filename is set correctly
+                        if "filename" not in arguments:
+                            arguments["filename"] = os.path.basename(filename)
+                        self.logger.info(f"Successfully converted {filename} to base64 for upload")
+                    else:
+                        return {
+                            "success": False,
+                            "error": f"Could not read or convert image file: {filename}"
+                        }
+            
             result = await self.mcp_client.call_tool(tool_name, arguments)
             return result
         except Exception as e:
@@ -635,15 +707,68 @@ Always provide helpful context and summaries when using these tools.
         if not tool_result.get('success'):
             return f"Tool execution failed: {tool_result.get('error', 'Unknown error')}"
         
-        # Get the data from the tool result
-        data = tool_result.get('data', {})
-        message = tool_result.get('message', 'Tool executed successfully')
+        # Check if this is a FastMCP result (has 'result' field with CallToolResult)
+        if 'result' in tool_result and hasattr(tool_result['result'], 'data'):
+            # FastMCP result format
+            fastmcp_result = tool_result['result']
+            data = fastmcp_result.data if hasattr(fastmcp_result, 'data') else {}
+            message = "FastMCP tool executed successfully"
+        elif 'result' in tool_result and hasattr(tool_result['result'], 'structured_content'):
+            # Alternative FastMCP result format
+            fastmcp_result = tool_result['result']
+            data = fastmcp_result.structured_content if hasattr(fastmcp_result, 'structured_content') else {}
+            message = "FastMCP tool executed successfully"
+        else:
+            # Standard MCP result format
+            data = tool_result.get('data', {})
+            message = tool_result.get('message', 'Tool executed successfully')
         
         # Format the content for GPT-5-mini analysis
         content_parts = [f"Tool Result: {message}"]
         
         if isinstance(data, dict):
-            # Format different types of data
+            # Handle FastMCP flake tool results
+            if 'models' in data and isinstance(data['models'], list):
+                # list_models result
+                models = data['models']
+                count = data.get('count', len(models))
+                content_parts.append(f"\nAvailable Models ({count} models):")
+                for i, model in enumerate(models, 1):
+                    content_parts.append(f"  {i}. {model}")
+            
+            elif 'uploaded' in data:
+                # upload_image result
+                uploaded = data.get('uploaded', False)
+                filename = data.get('filename', 'unknown')
+                content_parts.append(f"\nImage Upload:")
+                content_parts.append(f"  Uploaded: {uploaded}")
+                content_parts.append(f"  Server Filename: {filename}")
+            
+            elif 'quality' in data:
+                # predict_flake_quality result
+                quality = data.get('quality', 'unknown')
+                confidence = data.get('confidence', 0)
+                content_parts.append(f"\nFlake Quality Prediction:")
+                content_parts.append(f"  Quality: {quality}")
+                content_parts.append(f"  Confidence: {confidence}")
+            
+            elif 'predictions' in data:
+                # get_prediction_history result
+                predictions = data.get('predictions', [])
+                total = data.get('total', len(predictions))
+                content_parts.append(f"\nPrediction History ({total} total predictions):")
+                if predictions:
+                    content_parts.append(f"Recent predictions:")
+                    for i, pred in enumerate(predictions, 1):
+                        timestamp = pred.get('timestamp', 'unknown')
+                        model = pred.get('model', 'unknown')
+                        quality = pred.get('quality', 'unknown')
+                        confidence = pred.get('confidence', 0)
+                        content_parts.append(f"  {i}. {timestamp} - Model: {model}, Quality: {quality}, Confidence: {confidence}")
+                else:
+                    content_parts.append("  No predictions in history")
+            
+            # Format different types of data (existing ArXiv formatting)
             for key, value in data.items():
                 if key == 'high_priority_papers' and isinstance(value, list):
                     content_parts.append(f"\nHigh Priority Papers ({len(value)} papers):")

@@ -1,5 +1,5 @@
 {
-  "last_updated": "2025-09-02T17:29:27.691604",
+  "last_updated": "2025-09-02T20:39:26.336130",
   "tools": {
     "arxiv_daily": {
       "active": true,
@@ -12,7 +12,7 @@
       "name": "2D Flake Classification",
       "description": "AI-powered quality assessment via external MCP server",
       "category": "analysis",
-      "server_url": "http://0.0.0.0:8000",
+      "server_url": "http://localhost:8000/mcp",
       "connection_status": "failed"
     }
   }

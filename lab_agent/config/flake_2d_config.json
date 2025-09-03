@@ -6,7 +6,7 @@
     "category": "analysis"
   },
   "default_settings": {
-    "default_server_url": "http://0.0.0.0:8000",
+    "default_server_url": "http://localhost:8000",
     "connection_timeout": 10.0,
     "max_image_size_mb": 50,
     "supported_formats": ["jpg", "jpeg", "png", "tiff", "bmp"],
@@ -42,7 +42,7 @@
     },
     {
       "name": "Lab Network",
-      "url": "http://0.0.0.0:8000", 
+      "url": "http://localhost:8000", 
       "description": "Network accessible server"
     }
   ]

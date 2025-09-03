@@ -14,7 +14,7 @@ from fastmcp.client import Client
 class FastMCPFlakeClient:
     """Direct FastMCP client for 2D flake classification server"""
     
-    def __init__(self, server_url: str = "http://0.0.0.0:8000/mcp"):
+    def __init__(self, server_url: str = "http://localhost:8000/mcp"):
         """
         Initialize FastMCP client for 2D flake server
         
