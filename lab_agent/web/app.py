@@ -534,13 +534,34 @@ def llm_chatbox_interface():
                 st.markdown(f"**Size:** {uploaded_file.size / 1024:.1f} KB")
                 st.markdown(f"**Type:** {uploaded_file.type}")
                 
-                # Save button
-                if st.button("💾 Save for Analysis", key="save_main_upload"):
-                    if save_uploaded_image(uploaded_file):
-                        st.success(f"✅ Image saved! You can now reference '{uploaded_file.name}' in your chat.")
-                        st.rerun()
-                    else:
-                        st.error("❌ Failed to save image")
+                # Check if file is already saved
+                uploads_dir = os.path.join(os.getcwd(), "uploads", "flake_images")
+                file_path = os.path.join(uploads_dir, uploaded_file.name)
+                file_already_exists = os.path.exists(file_path)
+                
+                if file_already_exists:
+                    st.info("✅ File already saved for analysis")
+                    if st.button("🔄 Re-save", key="resave_main_upload"):
+                        with st.spinner("Re-saving image..."):
+                            success = save_uploaded_image(uploaded_file)
+                            if success:
+                                st.success(f"✅ Image re-saved! You can reference '{uploaded_file.name}' in your chat.")
+                                st.rerun()
+                            else:
+                                st.error("❌ Failed to re-save image")
+                else:
+                    # Save button
+                    if st.button("💾 Save for Analysis", key="save_main_upload"):
+                        with st.spinner("Saving image..."):
+                            success = save_uploaded_image(uploaded_file)
+                            if success:
+                                st.success(f"✅ Image saved! You can now reference '{uploaded_file.name}' in your chat.")
+                                # Small delay to ensure message is visible before rerun
+                                import time
+                                time.sleep(1)
+                                st.rerun()
+                            else:
+                                st.error("❌ Failed to save image")
         
         # Show uploaded files
         uploaded_images = get_uploaded_images()
@@ -849,16 +870,38 @@ def generate_daily_report_quick():
 def save_uploaded_image(uploaded_file) -> bool:
     """Save uploaded image to uploads directory"""
     try:
+        if uploaded_file is None:
+            st.error("No file provided to save")
+            return False
+        
         # Create uploads directory if it doesn't exist
         uploads_dir = os.path.join(os.getcwd(), "uploads", "flake_images")
         os.makedirs(uploads_dir, exist_ok=True)
         
-        # Save file with original name
+        # Check if file already exists
         file_path = os.path.join(uploads_dir, uploaded_file.name)
-        with open(file_path, "wb") as f:
-            f.write(uploaded_file.getbuffer())
+        if os.path.exists(file_path):
+            st.warning(f"File '{uploaded_file.name}' already exists. Overwriting...")
         
-        # Store file info in session state for GPT-5 reference
+        # Save file with original name
+        try:
+            with open(file_path, "wb") as f:
+                f.write(uploaded_file.getbuffer())
+        except Exception as write_error:
+            st.error(f"Failed to write file: {write_error}")
+            return False
+        
+        # Verify file was saved correctly
+        if not os.path.exists(file_path):
+            st.error("File was not saved correctly")
+            return False
+        
+        # Check file size
+        saved_size = os.path.getsize(file_path)
+        if saved_size != uploaded_file.size:
+            st.warning(f"File size mismatch: expected {uploaded_file.size}, got {saved_size}")
+        
+        # Store file info in session state for reference
         if "uploaded_flake_images" not in st.session_state:
             st.session_state.uploaded_flake_images = []
         
@@ -870,12 +913,17 @@ def save_uploaded_image(uploaded_file) -> bool:
                 'path': file_path,
                 'size': f"{uploaded_file.size / 1024:.1f} KB",
                 'type': uploaded_file.type,
-                'uploaded_at': datetime.now().isoformat()
+                'uploaded_at': datetime.now().isoformat(),
+                'source': 'session'
             })
         
+        # st.success(f"File saved successfully: {file_path}")  # Remove duplicate success message
         return True
+        
     except Exception as e:
-        st.error(f"Error saving image: {e}")
+        st.error(f"Unexpected error saving image: {e}")
+        import traceback
+        st.error(f"Traceback: {traceback.format_exc()}")
         return False
 
 def get_uploaded_images() -> List[Dict]:

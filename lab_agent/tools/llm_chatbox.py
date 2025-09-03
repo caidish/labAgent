@@ -84,15 +84,95 @@ class LLMChatbox:
         
         self.conversation_logger.info("-" * 50)
     
+    def _extract_filename_from_placeholder(self, file_path: str) -> str:
+        """Extract actual filename from placeholder formats"""
+        if not isinstance(file_path, str):
+            return str(file_path)
+        
+        # Handle square bracket placeholders like [BASE64_ENCODED_IMAGE_DATA]
+        if file_path.startswith('[') and file_path.endswith(']'):
+            inner_text = file_path[1:-1]  # Remove [ and ]
+            
+            # If it's a generic placeholder, try to find the most recent uploaded file
+            if inner_text in ['BASE64_ENCODED_IMAGE_DATA', 'base64_encoded_image_data', 'BASE64_DATA']:
+                # Try to get the most recently uploaded file from session state or filesystem
+                recent_file = self._get_most_recent_uploaded_file()
+                if recent_file:
+                    self.logger.info(f"Converting generic placeholder '{file_path}' to most recent file: {recent_file}")
+                    return recent_file
+                else:
+                    self.logger.warning(f"Generic placeholder '{file_path}' found but no recent files available")
+                    return file_path
+            
+            return inner_text
+        
+        # If it looks like a placeholder (enclosed in < >)
+        if file_path.startswith('<') and file_path.endswith('>'):
+            inner_text = file_path[1:-1]  # Remove < and >
+            
+            # Handle different placeholder patterns
+            patterns_to_remove = [
+                'BASE64_ENCODED_IMAGE_DATA_OF_',
+                'base64_encoded_image_data_of_',
+                'base64 of ',
+                'base64_of_',
+                'encoded_',
+                'base64_'
+            ]
+            
+            filename = inner_text
+            for pattern in patterns_to_remove:
+                if filename.startswith(pattern):
+                    filename = filename[len(pattern):]
+                    break
+            
+            return filename
+        
+        # Return as-is if no placeholder format detected
+        return file_path
+    
+    def _get_most_recent_uploaded_file(self) -> Optional[str]:
+        """Get the most recently uploaded file from filesystem"""
+        try:
+            uploads_dir = os.path.join(os.getcwd(), "uploads", "flake_images")
+            if not os.path.exists(uploads_dir):
+                return None
+            
+            # Get all image files with their modification times
+            image_files = []
+            valid_extensions = {'.jpg', '.jpeg', '.png', '.tiff', '.tif', '.bmp', '.gif'}
+            
+            for filename in os.listdir(uploads_dir):
+                file_path = os.path.join(uploads_dir, filename)
+                if os.path.isfile(file_path):
+                    file_ext = Path(filename).suffix.lower()
+                    if file_ext in valid_extensions:
+                        mtime = os.path.getmtime(file_path)
+                        image_files.append((filename, mtime))
+            
+            if not image_files:
+                return None
+            
+            # Sort by modification time (newest first) and return the most recent
+            image_files.sort(key=lambda x: x[1], reverse=True)
+            return image_files[0][0]
+            
+        except Exception as e:
+            self.logger.error(f"Error getting most recent uploaded file: {e}")
+            return None
+    
     def _read_image_to_base64(self, file_path: str) -> Optional[str]:
         """Read an image file and convert it to base64 string"""
         try:
+            # First, extract actual filename from any placeholder format
+            filename = self._extract_filename_from_placeholder(file_path)
+            
             # Handle different possible locations
             possible_paths = [
-                file_path,  # Direct path
-                os.path.join(os.getcwd(), file_path),  # Relative to current directory
-                os.path.join(os.getcwd(), "uploads", file_path),  # In uploads directory
-                os.path.join(os.getcwd(), "uploads", "flake_images", file_path),  # In flake_images subdirectory
+                filename,  # Direct path
+                os.path.join(os.getcwd(), filename),  # Relative to current directory
+                os.path.join(os.getcwd(), "uploads", filename),  # In uploads directory
+                os.path.join(os.getcwd(), "uploads", "flake_images", filename),  # In flake_images subdirectory
             ]
             
             actual_path = None
@@ -437,15 +517,13 @@ Always provide helpful context and summaries when using these tools.
                 
                 # Check if image_data looks like a file reference (not base64)
                 if isinstance(image_data, str) and len(image_data) < 1000 and not image_data.startswith('data:'):
-                    # Looks like a filename or placeholder, try to read the actual file
-                    if '<base64 of ' in image_data and image_data.endswith('>'):
-                        # Extract filename from placeholder like '<base64 of gr09.jpg>'
-                        filename = image_data.replace('<base64 of ', '').replace('>', '')
-                        self.logger.info(f"Converting placeholder '{image_data}' to actual base64 for file: {filename}")
+                    # Extract filename from any placeholder format
+                    filename = self._extract_filename_from_placeholder(image_data)
+                    
+                    if filename != image_data:
+                        self.logger.info(f"Converted placeholder '{image_data}' to filename: {filename}")
                     else:
-                        # Assume it's a direct filename
-                        filename = image_data
-                        self.logger.info(f"Converting filename '{filename}' to base64")
+                        self.logger.info(f"Using filename directly: {filename}")
                     
                     # Try to read and convert the file
                     base64_data = self._read_image_to_base64(filename)
