@@ -1040,6 +1040,34 @@ def delete_uploaded_image(filename: str) -> bool:
         st.error(f"Error deleting image: {e}")
         return False
 
+def check_fastmcp_connection_status():
+    """Check if FastMCP tools are available and update connection status"""
+    try:
+        from lab_agent.mcp.client import get_mcp_client
+        mcp_client = get_mcp_client()
+        
+        # Check if FastMCP tools are available
+        available_tools = mcp_client.get_available_tools()
+        fastmcp_tools = ['list_models', 'upload_image', 'predict_flake_quality', 'get_prediction_history']
+        
+        fastmcp_available = any(tool['name'] in fastmcp_tools for tool in available_tools)
+        
+        if fastmcp_available:
+            # Try to call list_models to verify actual connectivity
+            try:
+                result = asyncio.run(mcp_client.call_tool("list_models", {}))
+                if result.get("success"):
+                    return "connected"
+                else:
+                    return "failed"
+            except:
+                return "failed"
+        else:
+            return "failed"
+    except:
+        return "failed"
+
+
 def tools_interface():
     """Tools activation and management interface"""
     st.subheader("🔧 Tool Management")
@@ -1050,6 +1078,11 @@ def tools_interface():
     # Refresh tool manager state
     if st.button("🔄 Refresh Tool Status", use_container_width=True):
         st.session_state.tool_manager = ToolManager()
+        # Also update FastMCP connection status
+        if st.session_state.tool_manager.get_tool_status("flake_2d").get('active', False):
+            current_url = st.session_state.tool_manager.get_tool_status("flake_2d").get('server_url', 'http://localhost:8000')
+            connection_status = check_fastmcp_connection_status()
+            st.session_state.tool_manager.set_flake_2d_server(current_url, connection_status)
         st.rerun()
     
     # Get activation summary
@@ -1096,6 +1129,15 @@ def tools_interface():
     st.markdown("### 🔬 2D Flake Classification Tools")
     flake_status = tool_manager.get_tool_status("flake_2d")
     
+    # Auto-update connection status if tools are active
+    if flake_status.get('active', False) and flake_status.get('connection_status', 'failed') == 'failed':
+        # Check if FastMCP tools are actually working
+        connection_status = check_fastmcp_connection_status()
+        if connection_status == 'connected':
+            current_url = flake_status.get('server_url', 'http://localhost:8000')
+            tool_manager.set_flake_2d_server(current_url, connection_status)
+            flake_status = tool_manager.get_tool_status("flake_2d")  # Refresh status
+    
     col1, col2 = st.columns([3, 1])
     with col1:
         st.markdown(f"**{flake_status.get('name', '2D Flake Classification')}**")
@@ -1131,26 +1173,31 @@ def tools_interface():
                                     # Refresh tools to ensure flake tools are loaded
                                     mcp_client.refresh_tools()
                                     
-                                    # Call the actual MCP tool to test connection
-                                    result = asyncio.run(mcp_client.call_tool(
-                                        "connect_2d_flake_server", 
-                                        {"server_url": server_url, "test_connection": True}
-                                    ))
+                                    # Test connection using list_models (simplest FastMCP tool)
+                                    result = asyncio.run(mcp_client.call_tool("list_models", {}))
                                     
                                     if result.get("success"):
                                         tool_manager.set_flake_2d_server(server_url, "connected")
                                         st.success(f"🟢 Successfully connected to {server_url}")
-                                        st.info(f"ℹ️ Server response: {result.get('message', 'Connection successful')}")
+                                        
+                                        # Show available models if data is available
+                                        models_data = result.get('data', {})
+                                        if models_data:
+                                            available_models = models_data.get('models', [])
+                                            if available_models:
+                                                st.info(f"✅ Found {len(available_models)} available models: {', '.join(available_models[:3])}{'...' if len(available_models) > 3 else ''}")
+                                            else:
+                                                st.info("✅ Connection successful, server responding")
+                                        else:
+                                            st.info("✅ Connection successful")
                                         st.rerun()
                                     else:
-                                        error_msg = result.get("error", "Unknown connection error")
+                                        error_msg = result.get("error", "FastMCP server not responding")
                                         tool_manager.set_flake_2d_server(server_url, "failed")
                                         st.error(f"🔴 Connection failed: {error_msg}")
                                         
-                                        # Show available tools for debugging
-                                        available_tools = result.get('available_tools', [])
-                                        if available_tools:
-                                            st.info(f"Available MCP tools: {[tool.get('name') for tool in available_tools]}")
+                                        # Show helpful debugging info
+                                        st.info("💡 Make sure your FastMCP server is running on the specified URL")
                                         
                                 except Exception as e:
                                     tool_manager.set_flake_2d_server(server_url, "failed")
