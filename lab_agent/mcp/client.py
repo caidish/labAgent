@@ -156,11 +156,21 @@ class MCPClient:
         try:
             tool_defs = tool_group.get_tool_definitions()
             for tool_def in tool_defs:
-                tools.append({
-                    "name": tool_def.name,
-                    "description": tool_def.description,
-                    "inputSchema": tool_def.inputSchema
-                })
+                # Handle both dict and object formats
+                if isinstance(tool_def, dict):
+                    # Tool is already a dictionary
+                    tools.append({
+                        "name": tool_def.get("name", "unknown_tool"),
+                        "description": tool_def.get("description", ""),
+                        "inputSchema": tool_def.get("inputSchema", {})
+                    })
+                else:
+                    # Tool is an object with attributes
+                    tools.append({
+                        "name": getattr(tool_def, 'name', 'unknown_tool'),
+                        "description": getattr(tool_def, 'description', ''),
+                        "inputSchema": getattr(tool_def, 'inputSchema', {})
+                    })
         except Exception as e:
             self.logger.error(f"Error getting tools from group {group_name}: {e}")
         

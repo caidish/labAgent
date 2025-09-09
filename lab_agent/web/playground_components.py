@@ -9,7 +9,7 @@ import time
 from typing import Dict, Any, List, Optional, Iterator
 from datetime import datetime
 from ..playground import get_model_caps, get_available_models, REASONING_EFFORT_OPTIONS, VERBOSITY_OPTIONS
-from ..playground import MCPManager, PlaygroundClient
+from ..playground import MCPManager, PlaygroundClient, get_supported_reasoning_efforts, supports_temperature_top_p
 
 
 class PlaygroundUI:
@@ -108,57 +108,81 @@ class PlaygroundUI:
         
         config = {}
         
-        # Basic parameters in columns
-        col1, col2 = st.columns(2)
+        # Check if this is a reasoning model
+        is_reasoning = caps.supports.uses_completion_tokens
         
-        with col1:
-            config["temperature"] = st.slider(
-                "Temperature",
-                min_value=0.0,
-                max_value=2.0,
-                value=caps.defaults.temperature,
-                step=0.1,
-                help="Controls randomness in responses. Lower = more focused, Higher = more creative"
-            )
+        if is_reasoning:
+            # Reasoning model - show reasoning controls
+            st.info("🧠 **Reasoning Model**: This model uses specialized reasoning parameters instead of temperature/top-p")
             
-            # Reasoning effort (for o-series and GPT-5)
-            if caps.supports.reasoning_effort:
-                config["reasoning_effort"] = st.selectbox(
-                    "Reasoning Effort",
-                    REASONING_EFFORT_OPTIONS,
-                    index=REASONING_EFFORT_OPTIONS.index(caps.defaults.reasoning_effort or "medium"),
-                    help="How much computational effort to spend on reasoning"
-                )
-        
-        with col2:
-            config["top_p"] = st.slider(
-                "Top-p",
-                min_value=0.0,
-                max_value=1.0,
-                value=caps.defaults.top_p,
-                step=0.05,
-                help="Controls diversity via nucleus sampling"
-            )
+            col1, col2 = st.columns(2)
             
-            # Verbosity (for GPT-5)
-            if caps.supports.verbosity:
-                config["verbosity"] = st.selectbox(
-                    "Verbosity",
-                    VERBOSITY_OPTIONS,
-                    index=VERBOSITY_OPTIONS.index(caps.defaults.verbosity or "medium"),
-                    help="How detailed the model's responses should be"
+            with col1:
+                # Reasoning effort (for reasoning models)
+                if caps.supports.reasoning_effort:
+                    supported_efforts = get_supported_reasoning_efforts(model)
+                    default_effort = caps.defaults.reasoning_effort or "medium"
+                    config["reasoning_effort"] = st.selectbox(
+                        "Reasoning Effort",
+                        supported_efforts,
+                        index=supported_efforts.index(default_effort) if default_effort in supported_efforts else 0,
+                        help="How much computational effort to spend on reasoning. Higher effort = better results but slower."
+                    )
+                
+                # Token limit for reasoning models
+                if caps.defaults.max_completion_tokens:
+                    config["max_completion_tokens"] = st.slider(
+                        "Max Completion Tokens",
+                        min_value=100,
+                        max_value=caps.defaults.max_completion_tokens * 2,
+                        value=caps.defaults.max_completion_tokens,
+                        step=100,
+                        help="Maximum tokens for the model's response"
+                    )
+            
+            with col2:
+                # Verbosity (for GPT-5)
+                if caps.supports.verbosity:
+                    config["verbosity"] = st.selectbox(
+                        "Verbosity", 
+                        VERBOSITY_OPTIONS,
+                        index=VERBOSITY_OPTIONS.index(caps.defaults.verbosity or "medium"),
+                        help="How detailed the response should be"
+                    )
+        else:
+            # Chat model - show traditional controls
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                config["temperature"] = st.slider(
+                    "Temperature",
+                    min_value=0.0,
+                    max_value=2.0,
+                    value=caps.defaults.temperature or 0.2,
+                    step=0.1,
+                    help="Controls randomness in responses. Lower = more focused, Higher = more creative"
                 )
-        
-        # Max tokens (full width)
-        if caps.defaults.max_tokens:
-            config["max_tokens"] = st.number_input(
-                "Max Tokens",
-                min_value=100,
-                max_value=caps.defaults.max_tokens * 2,
-                value=caps.defaults.max_tokens,
-                step=100,
-                help="Maximum number of tokens in the response"
-            )
+                
+                # Token limit for chat models
+                if caps.defaults.max_tokens:
+                    config["max_tokens"] = st.slider(
+                        "Max Tokens",
+                        min_value=100,
+                        max_value=caps.defaults.max_tokens * 2,
+                        value=caps.defaults.max_tokens,
+                        step=100,
+                        help="Maximum tokens for the model's response"
+                    )
+            
+            with col2:
+                config["top_p"] = st.slider(
+                    "Top-p",
+                    min_value=0.0,
+                    max_value=1.0,
+                    value=caps.defaults.top_p or 1.0,
+                    step=0.05,
+                    help="Controls diversity via nucleus sampling"
+                )
         
         return config
     
@@ -429,6 +453,10 @@ class PlaygroundUI:
                 if result["success"]:
                     # Display response immediately
                     st.markdown(result["response"])
+                    
+                    # Show reasoning tokens for reasoning models
+                    if result.get("reasoning_tokens") and result["reasoning_tokens"] > 0:
+                        st.info(f"🧠 **Reasoning tokens used:** {result['reasoning_tokens']:,} (hidden thinking tokens)")
                     
                     # Show tool results if any
                     if result.get("tool_results"):

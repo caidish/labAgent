@@ -9,7 +9,7 @@ import asyncio
 from typing import List, Dict, Optional, Any
 from openai import OpenAI
 from ..utils import Config
-from .model_capabilities import get_model_caps, ModelCapabilities
+from .model_capabilities import get_model_caps, ModelCapabilities, is_reasoning_model, supports_temperature_top_p
 
 
 class PlaygroundClient:
@@ -85,7 +85,7 @@ class PlaygroundClient:
                 }
             
             # Handle tool calling with iterative approach (like llm_chatbox)
-            final_content, tool_call_results = await self._handle_tool_calling_loop(
+            final_content, tool_call_results, total_reasoning_tokens = await self._handle_tool_calling_loop(
                 result, model, api_params, max_iterations
             )
             
@@ -94,6 +94,7 @@ class PlaygroundClient:
                 "success": True,
                 "response": final_content,
                 "tool_results": tool_call_results,
+                "reasoning_tokens": total_reasoning_tokens,
                 "conversation": self.conversation_history.copy(),
                 "model_used": model,
                 "total_messages": len(self.conversation_history)
@@ -111,22 +112,35 @@ class PlaygroundClient:
         """Prepare API parameters based on model and config"""
         params = {
             "model": model,
-            "temperature": config.get("temperature", model_caps.defaults.temperature),
-            "top_p": config.get("top_p", model_caps.defaults.top_p),
             "stream": False,  # Non-streaming for reliability
         }
         
-        # Add model-specific parameters
-        if model_caps.defaults.max_tokens:
-            params["max_tokens"] = config.get("max_tokens", model_caps.defaults.max_tokens)
+        # Add temperature and top_p only for non-reasoning models
+        if supports_temperature_top_p(model):
+            params["temperature"] = config.get("temperature", model_caps.defaults.temperature)
+            params["top_p"] = config.get("top_p", model_caps.defaults.top_p)
+        
+        # Add token limits based on model type
+        if is_reasoning_model(model):
+            # Use max_completion_tokens for reasoning models
+            if model_caps.defaults.max_completion_tokens:
+                params["max_completion_tokens"] = config.get("max_completion_tokens", model_caps.defaults.max_completion_tokens)
+        else:
+            # Use max_tokens for chat models
+            if model_caps.defaults.max_tokens:
+                params["max_tokens"] = config.get("max_tokens", model_caps.defaults.max_tokens)
         
         # Add reasoning parameters for reasoning models
-        if model_caps.supports.reasoning_effort and "reasoning_effort" in config:
-            params["reasoning_effort"] = config["reasoning_effort"]
+        if model_caps.supports.reasoning_effort:
+            reasoning_effort = config.get("reasoning_effort", model_caps.defaults.reasoning_effort)
+            if reasoning_effort:
+                params["reasoning_effort"] = reasoning_effort
         
         # Add verbosity for GPT-5
-        if model_caps.supports.verbosity and "verbosity" in config:
-            params["verbosity"] = config["verbosity"]
+        if model_caps.supports.verbosity:
+            verbosity = config.get("verbosity", model_caps.defaults.verbosity)
+            if verbosity:
+                params["verbosity"] = verbosity
         
         return params
     
@@ -169,10 +183,18 @@ class PlaygroundClient:
             content = message.content or ""
             tool_calls = getattr(message, 'tool_calls', None)
             
+            # Extract reasoning tokens for reasoning models
+            reasoning_tokens = None
+            if hasattr(response, 'usage') and hasattr(response.usage, 'completion_tokens_details'):
+                completion_details = response.usage.completion_tokens_details
+                if hasattr(completion_details, 'reasoning_tokens'):
+                    reasoning_tokens = completion_details.reasoning_tokens
+            
             return {
                 "success": True,
                 "content": content,
                 "tool_calls": tool_calls,
+                "reasoning_tokens": reasoning_tokens,
                 "response": response
             }
             
@@ -183,11 +205,12 @@ class PlaygroundClient:
                 "error": str(e)
             }
     
-    async def _handle_tool_calling_loop(self, initial_result: Dict[str, Any], model: str, api_params: Dict[str, Any], max_iterations: int = 10) -> tuple[str, List[Dict[str, Any]]]:
+    async def _handle_tool_calling_loop(self, initial_result: Dict[str, Any], model: str, api_params: Dict[str, Any], max_iterations: int = 10) -> tuple[str, List[Dict[str, Any]], int]:
         """Handle iterative tool calling like llm_chatbox"""
         current_result = initial_result
         api_call_count = 1
         tool_call_results = []
+        total_reasoning_tokens = current_result.get("reasoning_tokens", 0) or 0
         
         while api_call_count <= max_iterations:
             tool_calls = current_result.get('tool_calls')
@@ -200,7 +223,7 @@ class PlaygroundClient:
                     "content": content
                 })
                 self.logger.info(f"Conversation completed after {api_call_count} API calls")
-                return content, tool_call_results
+                return content, tool_call_results, total_reasoning_tokens
             
             # Add assistant message with tool calls to conversation
             assistant_message = {
@@ -295,6 +318,10 @@ class PlaygroundClient:
             
             current_result = self._make_api_call(model, self.conversation_history, api_params)
             
+            # Add reasoning tokens from this call
+            if current_result.get("reasoning_tokens"):
+                total_reasoning_tokens += current_result["reasoning_tokens"]
+            
             if not current_result["success"]:
                 # API call failed - return what we have
                 error_msg = f"API call #{api_call_count} failed: {current_result['error']}"
@@ -303,7 +330,7 @@ class PlaygroundClient:
                     "role": "assistant",
                     "content": f"Tool execution completed, but processing error occurred: {current_result['error']}"
                 })
-                return f"Tool execution completed with error: {current_result['error']}", tool_call_results
+                return f"Tool execution completed with error: {current_result['error']}", tool_call_results, total_reasoning_tokens
         
         # Max iterations reached
         self.logger.warning(f"Max iterations ({max_iterations}) reached")
@@ -312,7 +339,7 @@ class PlaygroundClient:
             "role": "assistant",
             "content": final_msg
         })
-        return final_msg, tool_call_results
+        return final_msg, tool_call_results, total_reasoning_tokens
     
     def _format_tool_result_for_gpt(self, tool_result: Dict[str, Any]) -> str:
         """Format tool result for GPT analysis with complete data"""
