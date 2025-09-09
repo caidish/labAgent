@@ -17,6 +17,7 @@ from lab_agent.utils.tool_manager import ToolManager
 from lab_agent.agents.arxiv_daily_agent import ArxivDailyAgent
 from lab_agent.tools.arxiv_chat import ArxivChat
 from lab_agent.tools.llm_chatbox import LLMChatbox
+from lab_agent.web.playground_components import render_playground_tab
 
 nest_asyncio.apply()
 
@@ -82,6 +83,37 @@ def check_password():
     return False
 
 
+def add_system_log(level: str, message: str, component: str = "System"):
+    """Add a log entry to the system logs"""
+    if "system_logs" not in st.session_state:
+        st.session_state.system_logs = []
+    
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    log_entry = {
+        "timestamp": timestamp,
+        "level": level.upper(),
+        "component": component,
+        "message": message
+    }
+    
+    # Add to beginning of list (most recent first)
+    st.session_state.system_logs.insert(0, log_entry)
+    
+    # Keep only last 500 logs to prevent memory issues
+    if len(st.session_state.system_logs) > 500:
+        st.session_state.system_logs = st.session_state.system_logs[:500]
+
+
+def playground_interface():
+    """Render the model playground interface"""
+    try:
+        render_playground_tab()
+        add_system_log("info", "Playground interface accessed", "Playground")
+    except Exception as e:
+        st.error(f"Failed to load playground: {e}")
+        add_system_log("error", f"Playground interface error: {e}", "Playground")
+
+
 def main():
     load_dotenv()
     config = Config()
@@ -104,6 +136,7 @@ def main():
         st.markdown("### Session")
         logout_text = ui_settings.get("logout_button_text", "🚪 Logout")
         if st.button(logout_text, use_container_width=True):
+            add_system_log("info", "User logged out", "Authentication")
             st.session_state["authenticated"] = False
             st.rerun()
     
@@ -152,8 +185,13 @@ def main():
     if "tool_manager" not in st.session_state:
         st.session_state.tool_manager = ToolManager()
     
+    # Initialize system logs
+    if "system_logs" not in st.session_state:
+        st.session_state.system_logs = []
+        add_system_log("info", "Lab Agent System initialized successfully")
+    
     # Main navigation
-    tabs = st.tabs(["🏠 Overview", "📚 ArXiv Daily", "🔧 Tools", "📋 Logs"])
+    tabs = st.tabs(["🏠 Overview", "📚 ArXiv Daily", "🔧 Tools", "🎮 Playground", "📋 Logs"])
     
     with tabs[0]:
         col1, col2, col3 = st.columns([1, 1.5, 1.5])
@@ -224,8 +262,10 @@ def main():
         tools_interface()
         
     with tabs[3]:
-        st.subheader("System Logs")
-        st.text_area("Logs", "System initialized successfully...", height=200)
+        playground_interface()
+        
+    with tabs[4]:
+        logs_interface()
 
 
 def arxiv_daily_interface():
@@ -247,6 +287,7 @@ def arxiv_daily_interface():
         
         with col1:
             if st.button("🔄 Generate Daily Report", type="primary", use_container_width=True):
+                add_system_log("info", "Daily report generation started", "ArXiv Daily")
                 generate_daily_report()
         
         with col2:
@@ -297,8 +338,10 @@ def generate_daily_report():
             if result['success']:
                 if result.get('from_cache'):
                     st.info(f"📋 {result['message']}")  # Different icon for cached reports
+                    add_system_log("info", f"Daily report retrieved from cache: {result['total_papers']} papers", "ArXiv Daily")
                 else:
                     st.success(f"✅ {result['message']}")
+                    add_system_log("info", f"Daily report generated successfully: {result['total_papers']} papers", "ArXiv Daily")
                 
                 # Handle both string and integer keys for priority counts
                 priority_counts = result.get('priority_counts', {})
@@ -313,6 +356,7 @@ def generate_daily_report():
                 st.rerun()
             else:
                 st.error(f"❌ Error: {result.get('error', 'Unknown error')}")
+                add_system_log("error", f"Daily report generation failed: {result.get('error', 'Unknown error')}", "ArXiv Daily")
                 
         except Exception as e:
             st.error(f"❌ Error generating report: {e}")
@@ -556,12 +600,14 @@ def llm_chatbox_interface():
                             success = save_uploaded_image(uploaded_file)
                             if success:
                                 st.success(f"✅ Image saved! You can now reference '{uploaded_file.name}' in your chat.")
+                                add_system_log("info", f"Image uploaded and saved: {uploaded_file.name} ({uploaded_file.size / 1024:.1f} KB)", "File Upload")
                                 # Small delay to ensure message is visible before rerun
                                 import time
                                 time.sleep(1)
                                 st.rerun()
                             else:
                                 st.error("❌ Failed to save image")
+                                add_system_log("error", f"Failed to save uploaded image: {uploaded_file.name}", "File Upload")
         
         # Show uploaded files
         uploaded_images = get_uploaded_images()
@@ -1068,6 +1114,94 @@ def check_fastmcp_connection_status():
         return "failed"
 
 
+def logs_interface():
+    """System logs interface"""
+    st.subheader("📋 System Logs")
+    st.markdown("View real-time system activity and events")
+    
+    # Log controls
+    col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
+    
+    with col1:
+        # Filter by log level
+        log_levels = ["ALL", "INFO", "WARNING", "ERROR"]
+        selected_level = st.selectbox("Filter by Level", log_levels, key="log_level_filter")
+    
+    with col2:
+        if st.button("🔄 Refresh", use_container_width=True):
+            st.rerun()
+    
+    with col3:
+        if st.button("🗑️ Clear Logs", use_container_width=True):
+            st.session_state.system_logs = []
+            add_system_log("info", "System logs cleared by user", "System")
+            st.success("Logs cleared")
+            st.rerun()
+    
+    with col4:
+        # Auto-refresh toggle
+        auto_refresh = st.checkbox("Auto-refresh", value=False)
+        if auto_refresh:
+            st.rerun()
+    
+    st.markdown("---")
+    
+    # Display logs
+    logs = st.session_state.get("system_logs", [])
+    
+    if not logs:
+        st.info("No logs available. Interact with the system to generate log entries.")
+        return
+    
+    # Filter logs by level
+    if selected_level != "ALL":
+        logs = [log for log in logs if log["level"] == selected_level]
+    
+    # Show logs count
+    st.caption(f"Showing {len(logs)} log entries (most recent first)")
+    
+    # Display logs in a scrollable container
+    log_container = st.container()
+    
+    with log_container:
+        for i, log in enumerate(logs[:100]):  # Show first 100 logs
+            # Color coding for different log levels
+            if log["level"] == "ERROR":
+                st.error(f"🔴 **{log['timestamp']}** | {log['component']} | {log['message']}")
+            elif log["level"] == "WARNING":
+                st.warning(f"🟡 **{log['timestamp']}** | {log['component']} | {log['message']}")
+            else:
+                st.info(f"ℹ️ **{log['timestamp']}** | {log['component']} | {log['message']}")
+    
+    if len(logs) > 100:
+        st.caption(f"Showing first 100 of {len(logs)} total logs")
+    
+    # Show external log file option
+    st.markdown("---")
+    st.markdown("### 📄 External Log Files")
+    
+    if st.button("📁 Load Conversation Logs", use_container_width=True):
+        try:
+            conversation_log_path = "logs/conversation_trace.log"
+            if os.path.exists(conversation_log_path):
+                with open(conversation_log_path, 'r') as f:
+                    content = f.read()
+                    # Show last 20 lines
+                    lines = content.strip().split('\n')
+                    recent_lines = lines[-20:] if len(lines) > 20 else lines
+                    
+                st.text_area(
+                    "Recent Conversation Log Entries", 
+                    "\n".join(recent_lines), 
+                    height=300,
+                    help="Showing last 20 lines of conversation_trace.log"
+                )
+            else:
+                st.warning("Conversation log file not found")
+        except Exception as e:
+            st.error(f"Error loading conversation logs: {e}")
+
+
 def tools_interface():
     """Tools activation and management interface"""
     st.subheader("🔧 Tool Management")
@@ -1114,12 +1248,14 @@ def tools_interface():
             st.success("🟢 Active")
             if st.button("Deactivate", key="deactivate_arxiv"):
                 tool_manager.deactivate_tool("arxiv_daily")
+                add_system_log("info", "ArXiv Daily tools deactivated", "Tool Management")
                 st.success("ArXiv Daily tools deactivated")
                 st.rerun()
         else:
             st.warning("🟡 Inactive")
             if st.button("Activate", key="activate_arxiv"):
                 tool_manager.activate_tool("arxiv_daily")
+                add_system_log("info", "ArXiv Daily tools activated", "Tool Management")
                 st.success("ArXiv Daily tools activated")
                 st.rerun()
     
@@ -1179,6 +1315,7 @@ def tools_interface():
                                     if result.get("success"):
                                         tool_manager.set_flake_2d_server(server_url, "connected")
                                         st.success(f"🟢 Successfully connected to {server_url}")
+                                        add_system_log("info", f"Successfully connected to FastMCP server: {server_url}", "2D Flake Tools")
                                         
                                         # Show available models if data is available
                                         models_data = result.get('data', {})
@@ -1186,6 +1323,7 @@ def tools_interface():
                                             available_models = models_data.get('models', [])
                                             if available_models:
                                                 st.info(f"✅ Found {len(available_models)} available models: {', '.join(available_models[:3])}{'...' if len(available_models) > 3 else ''}")
+                                                add_system_log("info", f"Found {len(available_models)} models on server", "2D Flake Tools")
                                             else:
                                                 st.info("✅ Connection successful, server responding")
                                         else:
@@ -1195,6 +1333,7 @@ def tools_interface():
                                         error_msg = result.get("error", "FastMCP server not responding")
                                         tool_manager.set_flake_2d_server(server_url, "failed")
                                         st.error(f"🔴 Connection failed: {error_msg}")
+                                        add_system_log("error", f"FastMCP server connection failed: {error_msg}", "2D Flake Tools")
                                         
                                         # Show helpful debugging info
                                         st.info("💡 Make sure your FastMCP server is running on the specified URL")

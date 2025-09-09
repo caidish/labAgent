@@ -1,0 +1,67 @@
+{
+  "api_endpoints": {
+    "responses": "https://api.openai.com/v1/responses",
+    "chat": "https://api.openai.com/v1/chat/completions"
+  },
+  
+  "default_settings": {
+    "temperature": 0.2,
+    "top_p": 1.0,
+    "stream": true,
+    "max_retries": 3,
+    "timeout": 60
+  },
+  
+  "mcp_servers": {
+    "arxiv_daily": {
+      "id": "arxiv_daily",
+      "name": "ArXiv Daily",
+      "description": "Research paper recommendations and analysis",
+      "transport": "internal",
+      "enabled": true,
+      "category": "research"
+    },
+    
+    "flake_2d": {
+      "id": "flake_2d", 
+      "name": "2D Flake Classification",
+      "description": "AI-powered quality assessment via external MCP server",
+      "transport": "http",
+      "url": "http://localhost:8000",
+      "enabled": true,
+      "category": "analysis"
+    },
+    
+    "local_fastmcp": {
+      "id": "local_fastmcp",
+      "name": "Local FastMCP Server", 
+      "description": "Local development MCP server",
+      "transport": "http",
+      "url": "http://localhost:8123/mcp",
+      "enabled": true,
+      "category": "development"
+    }
+  },
+  
+  "ui_settings": {
+    "default_selected_servers": ["arxiv_daily"],
+    "show_reasoning_summaries": true,
+    "show_tool_call_details": true,
+    "auto_scroll": true,
+    "stream_display_delay": 50
+  },
+  
+  "tool_settings": {
+    "max_recursive_calls": 10,
+    "tool_timeout": 30,
+    "show_tool_progress": true,
+    "cache_tool_results": false
+  },
+  
+  "logging": {
+    "log_conversations": true,
+    "log_tool_calls": true,
+    "log_model_responses": false,
+    "max_log_entries": 1000
+  }
+}

@@ -168,9 +168,9 @@ Multi-agent system for laboratory automation and research using OpenAI GPT-4, Go
 #### **Project 1.2: MCP Server for Deep-Learning Tool**
 
 **M0 — Model Pipeline Spec (1 day)**
-- [ ] Choose models (segmentation/classification), input contract, output JSON
-- [ ] **Deliverable**: I/O spec + versioning plan
-- [ ] **Accept**: Sample request/response pair agreed
+- [x] Choose models (segmentation/classification), input contract, output JSON
+- [x] **Deliverable**: I/O spec + versioning plan
+- [x] **Accept**: Sample request/response pair agreed
 
 **M1 — MCP Skeleton & Tools (2 days)**
 - [ ] Tools:

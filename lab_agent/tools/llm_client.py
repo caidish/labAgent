@@ -140,7 +140,7 @@ class LLMClient:
                 "metadata": {
                     "model": model,
                     "tool_calls": self._format_tool_calls_for_chat(tool_calls),
-                    "usage": response.usage.dict() if response.usage else None
+                    "usage": response.usage.model_dump() if response.usage else None
                 }
             }
             

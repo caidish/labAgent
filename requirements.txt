@@ -27,3 +27,4 @@ asyncio-mqtt>=0.13.0
 
 # MCP (Model Context Protocol)
 mcp>=1.13.0
+fastmcp>=2.0.0
