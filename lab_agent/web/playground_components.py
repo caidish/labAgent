@@ -58,6 +58,7 @@ class PlaygroundUI:
         elif not isinstance(st.session_state.playground_selected_servers, list):
             st.session_state.playground_selected_servers = ["arxiv_daily"]
         
+        
         # Initialize conversation metadata
         if "playground_conversation_metadata" not in st.session_state:
             st.session_state.playground_conversation_metadata = {
@@ -74,22 +75,24 @@ class PlaygroundUI:
         
         available_models = get_available_models()
         model_options = list(available_models.keys())
-        model_display_names = [available_models[key].display_name for key in model_options]
         
-        selected_index = 0
-        if st.session_state.playground_selected_model in model_options:
-            selected_index = model_options.index(st.session_state.playground_selected_model)
+        # Use direct model values instead of indices to avoid race conditions
+        default_model = st.session_state.playground_selected_model
+        if default_model not in model_options:
+            default_model = model_options[0] if model_options else None
         
-        selected_index = st.selectbox(
+        selected_model = st.selectbox(
             "Select Model",
-            range(len(model_options)),
-            format_func=lambda x: model_display_names[x],
-            index=selected_index,
+            options=model_options,
+            format_func=lambda x: available_models[x].display_name,
+            index=model_options.index(default_model) if default_model in model_options else 0,
+            key="playground_model_selector",  # Unique key to prevent conflicts
             help="Choose which AI model to use for the conversation"
         )
         
-        selected_model = model_options[selected_index]
-        st.session_state.playground_selected_model = selected_model
+        # Update session state only if changed
+        if st.session_state.playground_selected_model != selected_model:
+            st.session_state.playground_selected_model = selected_model
         
         # Display model info
         model_caps = available_models[selected_model]
@@ -191,6 +194,11 @@ class PlaygroundUI:
         self._ensure_session_initialized()
         st.subheader("🔧 MCP Servers")
         
+        # Custom server URL input
+        self._render_custom_server_input()
+        
+        st.markdown("---")
+        
         available_servers = self.mcp_manager.get_available_servers()
         
         # Build mappings between server IDs and display names
@@ -263,6 +271,123 @@ class PlaygroundUI:
                         st.error(f"❌ {server_id}: {status.get('error', 'Unknown error')}")
         
         return selected_servers
+    
+    def _render_custom_server_input(self):
+        """Render custom FastMCP server input section"""
+        st.markdown("**➕ Add Custom FastMCP Server**")
+        
+        # Use form with clear_on_submit=True to automatically clear inputs
+        with st.form("add_custom_server", clear_on_submit=True):
+            col1, col2 = st.columns([3, 1])
+            
+            with col1:
+                server_url = st.text_input(
+                    "Server URL",
+                    placeholder="http://localhost:8123/mcp",
+                    help="Enter the complete URL of your FastMCP server (e.g., http://localhost:8123/mcp)"
+                )
+                
+                server_name = st.text_input(
+                    "Display Name (optional)",
+                    placeholder="My Custom Server",
+                    help="Optional display name for the server"
+                )
+            
+            with col2:
+                st.markdown("<br>", unsafe_allow_html=True)  # Spacing
+                connect_button = st.form_submit_button(
+                    "🔗 Connect", 
+                    use_container_width=True,
+                    help="Test connection and add server"
+                )
+        
+        # Handle connection attempt
+        if connect_button and server_url:
+            self._handle_custom_server_connection(server_url, server_name)
+        elif connect_button and not server_url:
+            st.error("❌ Please enter a server URL")
+        
+        # Show existing custom servers
+        self._show_custom_servers_status()
+    
+    def _handle_custom_server_connection(self, server_url: str, server_name: str = ""):
+        """Handle adding a custom server"""
+        with st.spinner("🔍 Testing connection..."):
+            try:
+                # Use asyncio to run the async method
+                import asyncio
+                import concurrent.futures
+                
+                def run_add_server():
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        return loop.run_until_complete(
+                            self.mcp_manager.add_custom_server(server_url, server_name)
+                        )
+                    finally:
+                        loop.close()
+                
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(run_add_server)
+                    result = future.result(timeout=10)
+                
+                if result["success"]:
+                    st.success(f"✅ Successfully connected to {result['server_name']}")
+                    st.info(f"🔧 Discovered {result.get('tool_count', 0)} tools")
+                    
+                    # Trigger UI refresh to show the new server
+                    st.rerun()
+                else:
+                    st.error(f"❌ Connection failed: {result.get('error', 'Unknown error')}")
+                    
+            except concurrent.futures.TimeoutError:
+                st.error("❌ Connection timed out (10s limit)")
+            except Exception as e:
+                st.error(f"❌ Connection error: {str(e)}")
+    
+    def _show_custom_servers_status(self):
+        """Show status of custom servers"""
+        connection_status = self.mcp_manager.get_connection_status()
+        custom_servers = {k: v for k, v in connection_status.items() if v.get("custom", False)}
+        
+        if custom_servers:
+            st.markdown("**🖥️ Custom Servers**")
+            
+            for server_id, status in custom_servers.items():
+                col1, col2, col3 = st.columns([3, 1, 1])
+                
+                with col1:
+                    # Server info
+                    server_name = status["name"]
+                    server_url = status.get("url", "Unknown URL")
+                    health = status.get("health", {})
+                    tool_count = health.get("tool_count", 0)
+                    
+                    if status.get("configured", False) and health.get("status") in ["configured", "healthy"]:
+                        st.success(f"🟢 **{server_name}** ({tool_count} tools)")
+                        st.caption(f"URL: {server_url}")
+                    else:
+                        st.error(f"🔴 **{server_name}** (not configured)")
+                        st.caption(f"URL: {server_url}")
+                
+                with col2:
+                    if st.button(f"🔄", key=f"refresh_{server_id}", help="Refresh connection"):
+                        # Refresh this specific server
+                        try:
+                            if self.mcp_manager.connect_to_server(server_id):
+                                st.rerun()
+                        except Exception as e:
+                            st.error(f"Refresh failed: {str(e)}")
+                
+                with col3:
+                    if st.button(f"🗑️", key=f"remove_{server_id}", help="Remove server"):
+                        # Remove the custom server
+                        if self.mcp_manager.remove_custom_server(server_id):
+                            st.success(f"Removed {server_name}")
+                            st.rerun()
+                        else:
+                            st.error("Failed to remove server")
     
     def render_tool_controls(self):
         """Render tool-related controls"""

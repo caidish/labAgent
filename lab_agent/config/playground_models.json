@@ -34,12 +34,12 @@
     
     "local_fastmcp": {
       "id": "local_fastmcp",
-      "name": "Local FastMCP Server", 
-      "description": "Local development MCP server",
+      "name": "Custom Servers", 
+      "description": "Custom FastMCP servers",
       "transport": "http",
       "url": "http://localhost:8123/mcp",
       "enabled": true,
-      "category": "development"
+      "category": "custom"
     }
   },
   

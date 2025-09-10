@@ -150,3 +150,5 @@ logs/
 /reports
 /uploads
 activate_env.sh
+lab_agent/config/custom_mcp_servers.json
+lab_agent/config/playground_models.json
