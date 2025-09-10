@@ -1,37 +1,87 @@
 # Claude Code Context - Lab Agent
 
 ## Project Overview
-Multi-agent system for laboratory automation and research using OpenAI GPT-4, Google Gemini, and various tools for web scraping, research paper analysis, and real-time communication.
+Multi-agent system for laboratory automation and research based on **labAgent Framework v1** - a pragmatic, lab-ready architecture for condensed-matter experiment lab with MCP-connected instruments.
+
+## Framework Architecture (v1)
+
+### Control Plane (LangGraph Implementation)
+- **LangGraph Planner:** ✅ **IMPLEMENTED** - Single entrypoint using LangGraph that converts intents/events into Task Graphs (DAG). Owns decomposition, routing, and approvals.
+- **Agent Pods (LangGraph Nodes):** ✅ **IMPLEMENTED**
+  - **Workers:** Instrument workflows via instrMCP/QCoDeS/RedPitaya/Nikon
+  - **Assistants:** Admin ops (receipts, emails, onboarding/offboarding, calendar, travel)
+  - **Science Consultants:** Literature triage + wiki maintenance with citations
+  - **Information Center:** Rolling briefs; "state of the experiment"
+- **Shared Services:** Event Bus, Memory Layer, Policy/Safety, Observability, Playground
+
+### Data Plane
+Structured logs, datasets, plots, reports, and wiki diffs flow through a content-addressed artifact store with traceable lineage.
+
+### Memory System (4-Layer Architecture)
+1. **Episodic (TTL):** Run logs, chat turns, task graphs. KV + retention (30–90 days)
+2. **Semantic (Vector/RAG):** Papers, wiki pages, lab notes, schematics; chunked with signed citations
+3. **Procedural (State):** Resumable checkpoints for workflows/instruments
+4. **Artifacts:** Datasets, plots, reports, invoices, email threads — content-addressed URIs
 
 ## Current Status
 ✅ **COMPLETED**
-- Basic project structure with proper Python packaging
-- All dependencies installed and working
-- Streamlit web interface functional
-- Core modules created: agents, tools, utils, web
-- Configuration system with environment variables
-- Base agent framework implemented
-- Web scraping tool with BeautifulSoup
-- ArXiv research paper parser
-- Logging system
+- **Basic project structure** with proper Python packaging
+- **Streamlit web interface** with playground and ArXiv integration
+- **Core modules**: agents, tools, utils, web, playground, mcp, planner
+- **Configuration system** with environment variables and JSON configs
+- **ArXiv Daily System** - Production ready with GPT-4 scoring and chat interface
+- **Model Playground** - Multi-model testing with MCP tool integration
+- **FastMCP Integration** - HTTP client with ephemeral connections
+- **Custom Server Persistence** - Automatic saving to config files
+- **LangGraph Planner** - Complete task orchestration system with agent pods
+- **LangChain/LangGraph Integration** - Advanced workflow management
 
-🚧 **IN PROGRESS**
+🚧 **IN PROGRESS** 
+- Framework v1 implementation roadmap (M0-M4)
 - Project 1.1: MCP Server for Glovebox Nikon Microscope
 
 ## 🗺️ PROJECT ROADMAP
 
-### **Project 1: Test Phase** 
+### **Framework v1 Rollout (M0→M4)**
+
+#### **M0 — Baseline Wiring** ✅ **COMPLETED**
+- [x] **LangGraph Planner**: Complete task decomposition and routing using LangGraph workflows
+- [x] **Worker Nodes**: Instrument simulation and real hardware control through MCP
+- [x] **Assistant Nodes**: Admin operations (receipts, emails, forms)
+- [x] **Consultant Nodes**: ArXiv integration and knowledge management
+- [x] **Info Center Nodes**: Brief generation and status reporting
+- [x] **Episodic memory**: Task state management and execution logging
+- [x] **Agent State System**: Complete state management with TypedDict
+- [x] **Conditional Routing**: Smart routing between agent pods based on conditions
+- [x] **MCP Integration**: Seamless integration with existing MCP server infrastructure
+- [x] **Error Handling**: Comprehensive error handling with retries and escalation
+
+#### **M1 — Safety & Live Operations**
+- [ ] **Interlocks + runlevels**: dry-run → sim → live progression
+- [ ] **First live overnight scan**: Actual instrument control
+- [ ] **Artifact store**: Content-addressed data storage
+- [ ] **Morning brief v1**: With plots and status updates
+
+#### **M2 — Knowledge & Ops Automation**
+- [ ] **Science Consultant**: Auto-updates wiki with citations
+- [ ] **Assistants**: Complete receipts/email drafts E2E
+- [ ] **Enhanced memory**: Semantic search and RAG
+
+#### **M3 — Reliability**
+- [ ] **Retries & checkpoint resume**: Robust workflow execution
+- [ ] **SLA alerts**: Monitoring and notifications
+- [ ] **Anomaly detection**: Automated issue identification
+- [ ] **Approvals dashboard**: Human-in-the-loop controls
+
+#### **M4 — Scale & Polish**
+- [ ] **Multi-device scheduling**: Conflict resolution
+- [ ] **Resource budgets**: Cost and time management
+- [ ] **Full evaluation loop**: Comprehensive testing and metrics
+
+### **Project 1: Instrument Integration**
 
 #### **Milestone 0: ArXiv Daily Update Model**
 ✅ **COMPLETED** - 2025-08-29
-- **ArXiv Daily Scraper**: Scrapes https://arxiv.org/list/cond-mat/new for new papers
-- **GPT-4 Scoring System**: AI-powered paper relevance scoring (1-3 priority levels)
-- **Daily Report Generator**: Beautiful HTML reports with priority sections
-- **Web Interface**: Manual trigger, report viewing, and clear functionality
-- **Smart Chat System**: GPT-4o chat interface for discussing papers
-- **Configuration**: Complete config system with keywords, prompts, and models
-- **Duplicate Prevention**: Won't regenerate existing daily reports
-- **No Database**: File-based storage for simplicity
 
 **Key Components:**
 - `lab_agent/tools/arxiv_daily_scraper.py` - Web scraping for ArXiv
@@ -42,8 +92,18 @@ Multi-agent system for laboratory automation and research using OpenAI GPT-4, Go
 - `lab_agent/web/app.py` - Streamlit interface with ArXiv Daily + Chat
 - `lab_agent/config/interestKeywords.txt` - Research interest keywords
 - `lab_agent/config/promptArxivRecommender.txt` - GPT scoring prompts
-- `lab_agent/config/arXivChatPrompt.txt` - Chat system prompts  
+- `lab_agent/config/arXivChatPrompt.txt` - Chat system prompts
 - `lab_agent/config/models.json` - Model configuration (GPT-4o)
+
+**Features:**
+- **ArXiv Daily Scraper**: Scrapes https://arxiv.org/list/cond-mat/new for new papers
+- **GPT-4 Scoring System**: AI-powered paper relevance scoring (1-3 priority levels)
+- **Daily Report Generator**: Beautiful HTML reports with priority sections
+- **Web Interface**: Manual trigger, report viewing, and clear functionality
+- **Smart Chat System**: GPT-4o chat interface for discussing papers
+- **Configuration**: Complete config system with keywords, prompts, and models
+- **Duplicate Prevention**: Won't regenerate existing daily reports
+- **No Database**: File-based storage for simplicity
 
 **Performance:**
 - New reports: 2-4 minutes (scraping + AI scoring)
@@ -51,7 +111,7 @@ Multi-agent system for laboratory automation and research using OpenAI GPT-4, Go
 - Chat responses: 2-5 seconds per message
 - Typical daily volume: 20-50 papers processed
 
-**Status**: ✅ **PRODUCTION READY** - Fully functional with chat interface
+**Status**: ✅ **PRODUCTION READY** - Science Consultant agent foundation
 
 #### **Project 1.1: MCP Server for Glovebox Nikon Microscope**
 
@@ -113,28 +173,9 @@ Multi-agent system for laboratory automation and research using OpenAI GPT-4, Go
 
 **Deliverables**:
 1. **Hardware Inventory Document** (`docs/hardware_inventory.md`)
-   - Complete device list with specs
-   - Connection diagrams
-   - Control interface summary
-2. **Command Reference** (`docs/command_reference.md`) 
-   - Available APIs and methods
-   - Parameter ranges and constraints
-   - Error codes and handling
+2. **Command Reference** (`docs/command_reference.md`)
 3. **Test Scripts** (`scripts/proof_of_concept/`)
-   - Camera control script
-   - Stage movement script
-   - Combined operation script
 4. **Technical Specification** (`docs/M0_technical_spec.md`)
-   - System architecture overview
-   - Recommended MCP server design
-   - Safety considerations
-
-**Acceptance Criteria**:
-- ✅ Can manually move stage to specific coordinates from script
-- ✅ Can capture images with programmatic exposure control  
-- ✅ All hardware components identified and documented
-- ✅ Test scripts run successfully 3/3 times
-- ✅ Technical specification approved for M1 implementation
 
 **M1 — MCP Skeleton & Tool Contracts (2-3 days)**
 - [ ] Stand up MCP server (Node/TS or Python) with health check + list_tools
@@ -229,41 +270,234 @@ Multi-agent system for laboratory automation and research using OpenAI GPT-4, Go
 - [ ] **Deliverable**: Simple CLI or web panel + transcripts + artifact links
 - [ ] **Accept**: Demo with human-in-the-loop confirmation works end-to-end
 
-#### **Cross-Cutting Requirements (All Projects)**
+### **Cross-Cutting Requirements (All Projects)**
 - [ ] **Config & Secrets**: .env + profiles (dev/glovebox/CI)
 - [ ] **Data Layout**: /raw, /processed, /exports, checksums
 - [ ] **CI/CD Tests**: Schema, contracts, linting
 - [ ] **Security & Docs**: Least-privilege, quickstart runbooks
 
-### **Project 2: General Framework & Best Practices**
-- [ ] Layout general framework for scaling this protocol
-- [ ] Document best practices for lab automation
-- [ ] Create reusable patterns and templates
+## LangGraph Task Orchestration System ✅ **IMPLEMENTED**
 
-### **Project 3: AI-Ready Lab (2-Nano Move)**
-- [ ] TBD - Advanced lab automation capabilities
+### Architecture Overview
+The labAgent Framework v1 uses **LangGraph** for robust task orchestration with the following components:
 
-## 📋 **IMMEDIATE NEXT STEPS**
-- [ ] Start with Project 1 Milestone 0: ArXiv daily update automation
-- [ ] Begin MCP server discovery phase for Nikon microscope
-- [ ] Set up development environment for MCP server development
+- **StateGraph**: Main workflow graph with conditional routing
+- **Agent Nodes**: Individual agent pod implementations (Worker, Assistant, Consultant, Info Center)
+- **Agent State**: Comprehensive state management using TypedDict
+- **Conditional Routing**: Smart decision logic for agent pod transitions
+- **MCP Integration**: Seamless tool execution through existing MCP servers
+- **Checkpointing**: Persistent state storage for workflow resumption
+
+### LangGraph Workflow Structure
+```python
+# Main workflow nodes
+intake → precheck → approval_gate → [agent_pods] → finalizer → END
+
+# Agent pod routing (conditional)
+worker ↔ assistant ↔ consultant → info_center → complete
+  ↓         ↓         ↓              ↓
+error_handler ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← 
+  ↓
+retry/escalate/abort
+```
+
+### Agent State Management
+```python
+class AgentState(TypedDict):
+    # Core task information
+    task_spec: TaskSpec
+    task_graph: Dict[str, TaskNode]
+    current_node: Optional[str]
+    
+    # Execution state
+    status: TaskStatus
+    runlevel: RunLevel
+    approved: bool
+    
+    # Memory and artifacts
+    memory_namespace: str
+    artifacts: Dict[str, str]
+    execution_log: List[Dict[str, Any]]
+    
+    # Error handling
+    errors: List[str]
+    retry_count: int
+    max_retries: int
+```
+
+### Task Execution Flow
+1. **Intake**: Parse user request → generate TaskSpec → create TaskGraph
+2. **Precheck**: Validate constraints, resources, budget, time windows
+3. **Approval Gate**: Handle runlevel elevation and human approvals
+4. **Agent Pod Execution**: Route between Worker/Assistant/Consultant/Info Center
+5. **Error Handling**: Automatic retries, escalation, and recovery
+6. **Finalization**: Resource cleanup, artifact storage, brief generation
+
+### Demo Usage
+```python
+from lab_agent.planner import TaskGraphPlanner
+from lab_agent.planner.agent_state import TaskSpec, RunLevel
+
+# Initialize planner
+planner = TaskGraphPlanner(mcp_manager)
+
+# Create task from natural language
+task_spec = await planner.create_task_from_request(
+    "Cooldown device D14, then 2D gate map at 20 mK",
+    owner="user",
+    runlevel=RunLevel.DRY_RUN
+)
+
+# Execute workflow
+result = await planner.execute_task(task_spec)
+print(f"Status: {result.status}, Artifacts: {len(result.artifacts)}")
+```
+
+## Task Graph System
+
+### TaskSpec Format (JSON)
+```json
+{
+  "task_id": "tg_2025-09-10_1532Z_001",
+  "goal": "Cooldown device D14, then 2D gate map at 20 mK",
+  "constraints": ["runlevel:live", "window:21:00-07:00", "max_power=2mW"],
+  "artifacts": ["device_map/D14.json"],
+  "owner": "jiaqi",
+  "sla": "P1D",
+  "tags": ["experiment", "cooldown", "gate-scan"]
+}
+```
+
+### TaskGraph Node Format
+```json
+{
+  "node_id": "cooldown_D14",
+  "agent": "worker.cooldown",
+  "tools": ["instrMCP.qcodes", "instrMCP.cryostat"],
+  "params": {"target_T": "20 mK", "rate": "<=5 mK/min"},
+  "guards": ["interlock.cryostat_ok", "shift=night"],
+  "on_success": ["scan_gatemap_D14"],
+  "on_fail": ["notify_owner", "attach_logs"]
+}
+```
+
+## Safety & Governance
+
+### Runlevels
+- **dry-run** (default): Simulation mode, no hardware interaction
+- **sim**: Hardware simulation with realistic responses
+- **live**: Actual hardware control (explicit elevation + approval required)
+
+### Capability Tokens
+Fine-grained permissions per MCP tool:
+- DAC voltage limits (e.g., ≤ 50 mV)
+- Read-only magnet operations
+- Temperature ramp rate restrictions
+
+### Policy Configuration
+```yaml
+approvals:
+  live_magnet_ramp: [pi, safety_officer]
+limits:
+  dac_vmax: 0.05   # Volts
+  temp_cool_rate: 5e-3  # K/s
+windows:
+  night_ops: "21:00-07:00"
+```
+
+## Inter-Agent Protocol
+
+### Message Format
+```json
+{
+  "msg_id": "evt_2025-09-10_1602Z_42",
+  "type": "task.dispatch|status.update|artifact.new|alert",
+  "sender": "planner|worker.cooldown|assistant.finance|consultant.lit",
+  "task_id": "tg_...|null",
+  "ns": "devices/D14|admin/receipts",
+  "payload": {"...": "..."},
+  "requires_ack": true,
+  "priority": "low|normal|high",
+  "visibility": "lab|owner|pi-only"
+}
+```
+
+## Memory System Contracts
+
+### Memory Namespace Convention
+```
+ns = devices/<ID>/experiments/<YYYY-MM-DD>
+ns = admin/receipts/<YYYY>/<MM>
+ns = labwiki/<topic>
+ns = papers/<arxiv_id>
+```
+
+### Memory Write Contract
+```json
+{
+  "who": "worker.gatemap",
+  "when": "2025-09-10T15:42:12Z",
+  "ns": "devices/D14/experiments/2025-09-10",
+  "type": "artifact.pointer",
+  "keys": ["dataset", "plot", "logbook_entry"],
+  "data": {
+    "dataset": "s3://lab/D14/2025-09-10/gatemap.h5",
+    "log": "obs://runs/tg_.../cooldown_D14.log",
+    "summary_md": "obs://runs/tg_.../summary.md"
+  },
+  "lineage": {"task_id": "tg_...", "parents": ["cooldown_D14"]},
+  "visibility": "lab"
+}
+```
+
+## Meeting Automation
+
+### Daily Brief Schema
+```json
+{
+  "brief_id": "brief_2025-09-10_lab",
+  "sections": [
+    {"title": "Experiment status", "bullets": ["..."]},
+    {"title": "New results", "links": ["..."]},
+    {"title": "Blockers/risks", "bullets": ["..."]},
+    {"title": "ArXiv to read", "citations": ["..."]},
+    {"title": "Admin", "bullets": ["..."]}
+  ]
+}
+```
 
 ## Tech Stack
 
 ### AI Models & APIs
-- **OpenAI GPT-4** - Primary AI model for agents
+- **OpenAI GPT-4** - Primary AI model for agents and planning
 - **Google Gemini API** - Secondary model for evaluation/comparison
+
+### Agent Orchestration (NEW)
+- **LangChain >= 0.2.0** - Agent framework and tool integration
+- **LangGraph >= 0.1.0** - Workflow orchestration and state management
+- **LangSmith >= 0.1.0** - Observability and debugging
 
 ### Core Python Libraries
 - **Web Scraping**: requests, beautifulsoup4, lxml
 - **Utilities**: tqdm, pytz, holidays
 - **Research**: feedparser (ArXiv RSS/Atom parsing)
 - **AI Integration**: openai library
+- **MCP Integration**: fastmcp >= 2.0.0
+- **State Management**: pydantic >= 2.0.0 (for type-safe state)
 
 ### Multi-Agent Extensions
 - **Web Interface**: streamlit
 - **Real-time Communication**: websockets
 - **Async Support**: nest-asyncio
+- **Task Management**: asyncio queues and locks
+- **Workflow Engine**: LangGraph StateGraph with conditional routing
+
+### Framework Components
+- **LangGraph Planner**: Task orchestration with agent pod coordination
+- **Playground**: Multi-model testing with tool calling
+- **MCP Manager**: Server connection and tool discovery
+- **Memory Layer**: Multi-tier storage and retrieval
+- **Safety Systems**: Interlocks and approval workflows
 
 ## Quick Start Commands
 
@@ -292,29 +526,65 @@ lab-agent        # CLI version
 lab-agent-web    # Web version
 ```
 
-## Project Structure
+## Project Structure (Framework v1)
 ```
 labAgent/
 ├── lab_agent/              # Main package
 │   ├── main.py            # Main entry point and LabAgent class
+│   ├── planner/           # ✅ LangGraph-based task orchestration
+│   │   ├── __init__.py    # Planner exports
+│   │   ├── task_graph_planner.py # Main LangGraph workflow engine
+│   │   ├── agent_state.py # TypedDict state management
+│   │   ├── routing.py     # Conditional routing logic
+│   │   ├── nodes.py       # Agent pod implementations (Worker/Assistant/Consultant/InfoCenter)
+│   │   └── mcp_integration.py # MCP tool execution bridge
 │   ├── agents/            # Agent implementations
 │   │   ├── base_agent.py  # Abstract base class for all agents
-│   │   └── __init__.py
+│   │   ├── arxiv_daily_agent.py # Science Consultant (✅ completed)
+│   │   ├── worker/        # [PLANNED] Instrument control agents
+│   │   ├── assistant/     # [PLANNED] Administrative operations
+│   │   ├── consultant/    # [PLANNED] Knowledge curation agents
+│   │   └── info_center/   # [PLANNED] Rolling intelligence
 │   ├── tools/             # Agent capabilities
 │   │   ├── web_scraper.py # Web scraping with requests/BeautifulSoup
 │   │   ├── arxiv_parser.py# Research paper parsing from ArXiv
-│   │   └── __init__.py
+│   │   ├── arxiv_daily_scraper.py # ArXiv daily automation
+│   │   ├── paper_scorer.py # GPT-4 paper relevance scoring
+│   │   ├── daily_report_generator.py # HTML/JSON reports
+│   │   └── arxiv_chat.py  # GPT-4o chat interface
+│   ├── mcp/               # MCP server integrations
+│   │   ├── mcp_server.py  # ArXiv Daily MCP server
+│   │   └── tools/         # MCP client tools
+│   ├── playground/        # ✅ Model testing environment
+│   │   ├── model_capabilities.py # Model feature definitions
+│   │   ├── playground_client.py # Multi-model client
+│   │   ├── responses_client.py # OpenAI Responses API
+│   │   ├── tool_adapter.py # MCP to OpenAI tool conversion
+│   │   ├── tool_loop.py   # Recursive tool execution
+│   │   ├── mcp_manager.py # MCP server management
+│   │   ├── fastmcp_http_client.py # FastMCP HTTP client
+│   │   └── streaming.py   # Response streaming utilities
+│   ├── memory/            # [PLANNED] Multi-layer memory system
+│   │   ├── episodic/      # [PLANNED] TTL storage
+│   │   ├── semantic/      # [PLANNED] Vector/RAG storage
+│   │   └── artifacts/     # [PLANNED] Content-addressed storage
+│   ├── safety/            # [PLANNED] Interlocks and governance
 │   ├── utils/             # Shared utilities
 │   │   ├── config.py      # Environment-based configuration
 │   │   ├── logger.py      # Logging setup
 │   │   └── __init__.py
 │   └── web/               # Streamlit web interface
 │       ├── app.py         # Main Streamlit dashboard
-│       └── __init__.py
+│       └── playground_components.py # Playground UI
+├── examples/              # ✅ Demo scripts and examples
+│   └── langgraph_planner_demo.py # LangGraph planner demonstration
 ├── tests/                 # Test suite
-├── requirements.txt       # Python dependencies
+├── requirements.txt       # Python dependencies (includes LangChain/LangGraph)
 ├── setup.py              # Package configuration
 ├── .env.example          # Environment variables template
+├── PLAYGROUND.md         # Playground documentation
+├── RAGs_example.md       # Task DAG examples and visualizations
+├── labagent_framework_v_1.md # Framework specification
 └── .gitignore           # Git ignore rules
 ```
 
@@ -334,22 +604,64 @@ DEBUG=false
 LOG_LEVEL=INFO
 ```
 
+### Framework Configuration Files
+- `lab_agent/config/playground_models.json` - Model and MCP server configurations
+- `lab_agent/config/custom_mcp_servers.json` - Persistent custom server storage
+- `lab_agent/config/models.json` - Model configuration for ArXiv system
+- `lab_agent/config/*.txt` - Prompt templates and keywords
+
 ## Architecture Notes
 
 ### Agent System
 - **BaseAgent**: Abstract base class in `lab_agent/agents/base_agent.py`
 - Agents are async-first with lifecycle management (start/stop/cleanup)
 - Each agent has name, config, and task processing capabilities
+- Agent Pods will implement role-specific behaviors (Worker, Assistant, Consultant, Information Center)
 
 ### Tools System
 - **WebScraper**: Handles web scraping with rate limiting and error handling
 - **ArxivParser**: Parses research papers from ArXiv API using feedparser
+- **MCP Integration**: Tools accessible through Model Context Protocol
 - Tools are designed to be used by agents for specific capabilities
+
+### Playground System (✅ Production Ready)
+- **Multi-model Support**: GPT-4.1, GPT-4o, o-series, GPT-5
+- **MCP Tool Integration**: ArXiv Daily, 2D Flake Classification, Custom FastMCP
+- **Streaming Responses**: Real-time response display
+- **Tool Call Visualization**: See tool execution in real-time
+- **Custom Server Persistence**: Automatic saving of custom MCP servers
 
 ### Configuration
 - Environment-based configuration in `lab_agent/utils/config.py`
 - Validation for required API keys
 - Support for development and production settings
+- JSON-based configuration for models and MCP servers
+
+## Metrics & Evaluation
+
+### Experiment Metrics
+- Uptime and success rate
+- Scan throughput and SNR
+- Drift measurements
+- % dry-run vs live operations
+- Incident tracking
+
+### Knowledge Metrics
+- Citation coverage
+- Hallucination rate
+- Brief freshness
+- Time-to-insight
+
+### Administrative Metrics
+- Receipt cycle time
+- Email SLA compliance
+- Error rates
+
+### Cost Metrics
+- Token usage
+- Storage costs
+- Instrument time
+- Consumables tracking
 
 ## Common Issues & Solutions
 
@@ -361,6 +673,12 @@ LOG_LEVEL=INFO
 ### Missing Dependencies
 - Run `pip install -r requirements.txt` if you get import errors
 - Use virtual environment to avoid conflicts
+- For MCP features: `pip install fastmcp>=2.0.0`
+
+### MCP Connection Issues
+- Check FastMCP server is running at localhost:8123/mcp
+- Verify server configuration in playground_models.json
+- Check custom_mcp_servers.json for persistent server storage
 
 ## Development Workflow
 1. Create feature branch: `git checkout -b feature/new-agent`
@@ -371,8 +689,8 @@ LOG_LEVEL=INFO
 6. Merge to main when stable
 
 ---
-**Last Updated**: 2025-08-29  
-**Claude Code Session**: Initial project setup completed, comprehensive roadmap added
+**Last Updated**: 2025-09-10  
+**Claude Code Session**: Framework v1 integration and comprehensive architecture documentation
 
 **Update CLAUDE.md when:**
 - Major features are completed
@@ -381,3 +699,6 @@ LOG_LEVEL=INFO
 - Project status changes significantly
 - Milestones are reached
 - New projects/phases begin
+- Framework components are implemented
+- always use langchain llm api rather than openai ones
+- use venv by default

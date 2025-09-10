@@ -26,3 +26,19 @@ def setup_logger(level: str = "INFO", log_file: Optional[str] = None) -> logging
         logger.addHandler(file_handler)
     
     return logger
+
+
+def get_logger(name: str = None) -> logging.Logger:
+    """Get a logger instance for the given name"""
+    if name is None:
+        name = "lab_agent"
+    elif not name.startswith("lab_agent"):
+        name = f"lab_agent.{name}"
+    
+    logger = logging.getLogger(name)
+    
+    # If no handlers, set up basic configuration
+    if not logger.handlers and not logging.getLogger("lab_agent").handlers:
+        setup_logger()
+    
+    return logger

@@ -1,0 +1,261 @@
+{
+  "workflow_templates": {
+    "experimental_measurement": {
+      "description": "Template for experimental measurements involving cooldown and data acquisition",
+      "trigger_keywords": ["cooldown", "measurement", "sweep", "gate", "device"],
+      "template": {
+        "nodes": [
+          {
+            "type": "cooldown",
+            "agent": "worker.cooldown",
+            "tools": ["instrMCP.cryostat", "instrMCP.temperature"],
+            "typical_params": ["target_T", "rate", "device"],
+            "safety_guards": ["interlock.cryostat_ok", "shift=night_ops"]
+          },
+          {
+            "type": "instrument_config", 
+            "agent": "worker.lockin",
+            "tools": ["instrMCP.lockin", "instrMCP.daq"],
+            "typical_params": ["frequency", "sensitivity"],
+            "safety_guards": ["capability: DAC ≤ voltage_limit"]
+          },
+          {
+            "type": "measurement",
+            "agent": "worker.sweep", 
+            "tools": ["instrMCP.sweep", "instrMCP.daq"],
+            "typical_params": ["type", "range", "device"],
+            "safety_guards": ["capability: DAC ≤ voltage_limit"]
+          },
+          {
+            "type": "data_management",
+            "agent": "assistant.storage",
+            "tools": ["artifact.store", "artifact.index"],
+            "typical_params": ["format", "metadata"],
+            "safety_guards": []
+          }
+        ],
+        "typical_flow": "cooldown → instrument_config → measurement → data_management"
+      }
+    },
+    
+    "literature_research": {
+      "description": "Template for literature search and analysis workflows",
+      "trigger_keywords": ["papers", "arxiv", "search", "literature", "research"],
+      "template": {
+        "nodes": [
+          {
+            "type": "search",
+            "agent": "consultant.arxiv",
+            "tools": ["arxiv.search", "paper.score"],
+            "typical_params": ["keywords", "days", "categories"],
+            "safety_guards": []
+          },
+          {
+            "type": "analysis",
+            "agent": "consultant.summarize",
+            "tools": ["paper.analyze", "summary.generate"],
+            "typical_params": ["format", "citations", "detail_level"],
+            "safety_guards": []
+          },
+          {
+            "type": "knowledge_update",
+            "agent": "consultant.wiki",
+            "tools": ["wiki.update", "citation.add"],
+            "typical_params": ["auto_commit", "review_required"],
+            "safety_guards": []
+          },
+          {
+            "type": "reporting",
+            "agent": "info_center.brief",
+            "tools": ["brief.generate", "email.notify"],
+            "typical_params": ["type", "recipients"],
+            "safety_guards": []
+          }
+        ],
+        "typical_flow": "search → analysis → knowledge_update → reporting"
+      }
+    },
+    
+    "administrative_processing": {
+      "description": "Template for administrative tasks like receipts, forms, documentation",
+      "trigger_keywords": ["receipt", "expense", "form", "reimbursement", "admin"],
+      "template": {
+        "nodes": [
+          {
+            "type": "document_processing",
+            "agent": "assistant.ocr",
+            "tools": ["ocr.process", "receipt.parse"],
+            "typical_params": ["validate", "extract_fields"],
+            "safety_guards": []
+          },
+          {
+            "type": "policy_validation",
+            "agent": "assistant.policy",
+            "tools": ["policy.validate", "approval.check"],
+            "typical_params": ["auto_approve_under", "escalation_threshold"],
+            "safety_guards": []
+          },
+          {
+            "type": "form_generation",
+            "agent": "assistant.forms",
+            "tools": ["forms.fill", "email.draft"],
+            "typical_params": ["template", "auto_submit"],
+            "safety_guards": []
+          },
+          {
+            "type": "notification",
+            "agent": "info_center.notify",
+            "tools": ["email.send", "slack.notify"],
+            "typical_params": ["recipients", "urgency"],
+            "safety_guards": []
+          }
+        ],
+        "typical_flow": "document_processing → policy_validation → form_generation → notification"
+      }
+    },
+    
+    "imaging_workflow": {
+      "description": "Template for microscope imaging and analysis",
+      "trigger_keywords": ["image", "microscope", "photo", "snap", "scan"],
+      "template": {
+        "nodes": [
+          {
+            "type": "stage_positioning",
+            "agent": "worker.microscope",
+            "tools": ["instrMCP.stage", "instrMCP.positioning"],
+            "typical_params": ["x", "y", "z", "speed"],
+            "safety_guards": ["interlock.stage_limits", "collision_detection"]
+          },
+          {
+            "type": "imaging",
+            "agent": "worker.microscope",
+            "tools": ["instrMCP.camera", "instrMCP.illumination"],
+            "typical_params": ["exposure", "gain", "illumination_intensity"],
+            "safety_guards": ["capability: exposure ≤ max_time"]
+          },
+          {
+            "type": "image_analysis",
+            "agent": "consultant.analysis",
+            "tools": ["image.analyze", "feature.extract"],
+            "typical_params": ["analysis_type", "feature_detection"],
+            "safety_guards": []
+          }
+        ],
+        "typical_flow": "stage_positioning → imaging → image_analysis"
+      }
+    }
+  },
+  
+  "parameter_extraction_patterns": {
+    "temperature": {
+      "patterns": ["\\d+\\.?\\d*\\s*(K|mK|°C|°F)", "\\d+\\s*millikelvin", "\\d+\\s*kelvin"],
+      "units": ["K", "mK", "°C", "°F"],
+      "conversion_to_si": {
+        "K": 1.0,
+        "mK": 0.001,
+        "°C": "lambda x: x + 273.15",
+        "°F": "lambda x: (x - 32) * 5/9 + 273.15"
+      }
+    },
+    "voltage": {
+      "patterns": ["[±]?\\d+\\.?\\d*\\s*(V|mV|µV|uV)", "\\d+\\s*volts?", "\\d+\\s*millivolts?"],
+      "units": ["V", "mV", "µV", "uV"],
+      "conversion_to_si": {
+        "V": 1.0,
+        "mV": 0.001,
+        "µV": 0.000001,
+        "uV": 0.000001
+      }
+    },
+    "time": {
+      "patterns": ["\\d+\\.?\\d*\\s*(s|min|h|hr|hours?|minutes?|seconds?)", "\\d+:\\d+"],
+      "units": ["s", "min", "h", "hr"],
+      "conversion_to_si": {
+        "s": 1.0,
+        "min": 60.0,
+        "h": 3600.0,
+        "hr": 3600.0
+      }
+    },
+    "device_id": {
+      "patterns": ["D\\d+", "device\\s+[A-Z]?\\d+", "sample\\s+\\w+"],
+      "examples": ["D14", "device 22", "sample A1"]
+    },
+    "time_window": {
+      "patterns": ["\\d{1,2}:\\d{2}\\s*-\\s*\\d{1,2}:\\d{2}", "night\\s*ops?", "business\\s*hours?"],
+      "examples": ["21:00-07:00", "night ops", "9:00-17:00"]
+    }
+  },
+  
+  "safety_constraint_templates": {
+    "temperature_limits": {
+      "cooldown_rate": "<=5 mK/min",
+      "min_temperature": "4.2 K",
+      "thermal_shock_prevention": true
+    },
+    "voltage_limits": {
+      "max_dac_voltage": "±50 mV",
+      "max_bias_voltage": "±1 V",
+      "current_compliance": "1 µA"
+    },
+    "mechanical_limits": {
+      "stage_x_range": "±10 mm",
+      "stage_y_range": "±10 mm", 
+      "stage_z_range": "±5 mm",
+      "max_speed": "1 mm/s"
+    },
+    "time_constraints": {
+      "night_operations": "21:00-07:00",
+      "max_measurement_time": "8 hours",
+      "cooldown_time_budget": "4 hours"
+    }
+  },
+  
+  "common_tool_combinations": {
+    "cryogenic_measurement": [
+      "instrMCP.cryostat",
+      "instrMCP.temperature", 
+      "instrMCP.lockin",
+      "instrMCP.daq"
+    ],
+    "electrical_transport": [
+      "instrMCP.lockin",
+      "instrMCP.daq",
+      "instrMCP.sweep",
+      "instrMCP.multimeter"
+    ],
+    "optical_imaging": [
+      "instrMCP.camera",
+      "instrMCP.stage",
+      "instrMCP.illumination",
+      "instrMCP.filters"
+    ],
+    "literature_analysis": [
+      "arxiv.search",
+      "paper.score",
+      "paper.analyze",
+      "wiki.update"
+    ],
+    "data_management": [
+      "artifact.store",
+      "artifact.index",
+      "backup.create",
+      "metadata.extract"
+    ]
+  },
+  
+  "validation_rules": {
+    "required_fields": ["node_id", "agent", "tools"],
+    "valid_agents": [
+      "worker.cooldown", "worker.sweep", "worker.lockin", "worker.microscope",
+      "assistant.storage", "assistant.forms", "assistant.ocr", "assistant.policy",
+      "consultant.arxiv", "consultant.wiki", "consultant.analysis",
+      "info_center.brief", "info_center.notify"
+    ],
+    "safety_requirements": {
+      "live_operations": ["human_approval", "safety_guards"],
+      "hardware_control": ["interlocks", "limits_check"],
+      "high_voltage": ["isolation_check", "current_limiting"]
+    }
+  }
+}

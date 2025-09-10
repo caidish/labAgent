@@ -1,0 +1,101 @@
+{
+  "models": {
+    "task_decomposition": {
+      "name": "gpt-4o",
+      "provider": "openai",
+      "description": "Primary model for breaking down natural language requests into structured task graphs",
+      "settings": {
+        "temperature": 0.2,
+        "max_tokens": 2000,
+        "top_p": 1.0,
+        "frequency_penalty": 0.0,
+        "presence_penalty": 0.0
+      },
+      "cost_limits": {
+        "max_tokens_per_request": 4000,
+        "daily_token_budget": 100000
+      }
+    },
+    
+    "parameter_extraction": {
+      "name": "gpt-4o",
+      "provider": "openai", 
+      "description": "Model for extracting specific parameters from natural language (temperatures, voltages, etc.)",
+      "settings": {
+        "temperature": 0.1,
+        "max_tokens": 500,
+        "top_p": 0.9
+      }
+    },
+    
+    "safety_validation": {
+      "name": "gpt-4o",
+      "provider": "openai",
+      "description": "Model for validating safety constraints and identifying potential risks",
+      "settings": {
+        "temperature": 0.0,
+        "max_tokens": 300,
+        "top_p": 0.8
+      }
+    }
+  },
+  
+  "fallback_models": [
+    {
+      "name": "gpt-4-turbo",
+      "provider": "openai",
+      "use_case": "When gpt-4o is unavailable"
+    },
+    {
+      "name": "gpt-4",
+      "provider": "openai", 
+      "use_case": "Final fallback option"
+    }
+  ],
+  
+  "langchain_settings": {
+    "openai_api_key": "env:OPENAI_API_KEY",
+    "request_timeout": 60,
+    "max_retries": 3,
+    "streaming": false,
+    "callbacks": [
+      "langsmith",
+      "cost_tracking"
+    ]
+  },
+  
+  "structured_output": {
+    "enabled": true,
+    "format": "pydantic",
+    "strict_mode": true,
+    "validation_retries": 2
+  },
+  
+  "safety_controls": {
+    "enable_content_filter": true,
+    "human_approval_required": {
+      "runlevel_live": true,
+      "cost_over_threshold": 1000,
+      "unknown_operations": true
+    },
+    "fallback_to_rules": {
+      "on_llm_failure": true,
+      "on_invalid_output": true,
+      "on_safety_violation": true
+    }
+  },
+  
+  "monitoring": {
+    "log_prompts": true,
+    "log_responses": true,
+    "track_token_usage": true,
+    "track_latency": true,
+    "alert_on_high_cost": true
+  },
+  
+  "cache_settings": {
+    "enable_response_cache": true,
+    "cache_ttl_seconds": 3600,
+    "cache_key_fields": ["goal", "constraints", "runlevel"]
+  }
+}
